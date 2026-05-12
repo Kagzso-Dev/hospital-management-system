@@ -70,7 +70,7 @@ export default function ReceiptView({ receipt, appointment, onNewBooking }) {
     <div className="max-w-sm mx-auto space-y-4 animate-fade-up px-1">
       {/* Success banner */}
       <div className="text-center space-y-1 py-2">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center mx-auto mb-3 border border-green-500/30">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-green-800 text-green-300 flex items-center justify-center mx-auto mb-3 border-2 border-green-600">
           <svg width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
           </svg>
@@ -88,19 +88,19 @@ export default function ReceiptView({ receipt, appointment, onNewBooking }) {
 
       {/* Receipt details */}
       <div className="card text-sm space-y-1.5 font-mono" ref={printRef}>
-        <div className="text-center font-bold text-white/80 text-xs tracking-widest mb-2">══ PAYMENT RECEIPT ══</div>
+        <div className="text-center font-bold text-slate-500 text-xs tracking-widest mb-2">══ PAYMENT RECEIPT ══</div>
 
         {[
           { label: 'Receipt No', value: receipt.receipt_no },
           { label: 'Date', value: fmt(receipt.created_at) },
         ].map(r => (
           <div key={r.label} className="flex justify-between gap-2">
-            <span className="text-white/50">{r.label}</span>
-            <span className="text-white/90 font-semibold text-right">{r.value}</span>
+            <span className="text-slate-500">{r.label}</span>
+            <span className="text-slate-800 font-semibold text-right">{r.value}</span>
           </div>
         ))}
 
-        <div className="border-t border-dashed border-white/15 my-2" />
+        <div className="border-t border-dashed border-slate-200 my-2" />
 
         {[
           { label: 'Patient', value: receipt.patient_name },
@@ -108,30 +108,30 @@ export default function ReceiptView({ receipt, appointment, onNewBooking }) {
           { label: 'Doctor', value: receipt.doctor_name },
         ].map(r => (
           <div key={r.label} className="flex justify-between gap-2">
-            <span className="text-white/50 flex-shrink-0">{r.label}</span>
-            <span className="text-white/90 font-medium text-right max-w-[160px] truncate">{r.value}</span>
+            <span className="text-slate-500 flex-shrink-0">{r.label}</span>
+            <span className="text-slate-700 font-medium text-right max-w-[160px] truncate">{r.value}</span>
           </div>
         ))}
 
-        <div className="border-t border-dashed border-white/15 my-2" />
+        <div className="border-t border-dashed border-slate-200 my-2" />
 
         <div className="flex justify-between gap-2">
-          <span className="text-white/50">Consultation</span>
-          <span className="font-bold text-green-400">₹{Number(receipt.amount).toLocaleString('en-IN')}</span>
+          <span className="text-slate-500">Consultation</span>
+          <span className="font-bold text-green-600">₹{Number(receipt.amount).toLocaleString('en-IN')}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span className="text-white/50">Mode</span>
-          <span className="font-semibold text-white/90 uppercase">{MODE_LABEL[receipt.payment_mode] || receipt.payment_mode}</span>
+          <span className="text-slate-500">Mode</span>
+          <span className="font-semibold text-slate-800 uppercase">{MODE_LABEL[receipt.payment_mode] || receipt.payment_mode}</span>
         </div>
         {receipt.transaction_ref && (
           <div className="flex justify-between gap-2">
-            <span className="text-white/50">Ref</span>
-            <span className="text-white/90">{receipt.transaction_ref}</span>
+            <span className="text-slate-500">Ref</span>
+            <span className="text-slate-700">{receipt.transaction_ref}</span>
           </div>
         )}
 
-        <div className="border-t border-dashed border-white/15 my-2" />
-        <div className="text-center text-xs text-white/40 mt-1">Thank you for visiting!</div>
+        <div className="border-t border-dashed border-slate-200 my-2" />
+        <div className="text-center text-xs text-slate-400 mt-1">Thank you for visiting!</div>
       </div>
 
       <div className="flex gap-3">

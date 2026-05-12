@@ -2,6 +2,7 @@
 import { searchPatients, createPatient, getDoctors, getAvailableSlots, createAppointment } from '../../api';
 import PaymentStep from './PaymentStep';
 import ReceiptView from './ReceiptView';
+import { useToast } from '../../components/Toast';
 
 const STEPS = { SEARCH: 'search', REGISTER: 'register', BOOK: 'book', PAYMENT: 'payment', RECEIPT: 'receipt' };
 
@@ -179,6 +180,7 @@ function PatientCard({ patient, onSelect }) {
 
 
 function RegisterForm({ phone, onRegistered }) {
+  const toast = useToast();
   const [form, setForm] = useState({ name: '', age: '', gender: 'Male', phone: phone || '', address: '', id_number: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -290,8 +292,8 @@ function RegisterForm({ phone, onRegistered }) {
     try {
       const { data } = await createPatient(form);
       setRegistered(true);
-      setTimeout(() => setRegistered(false), 2000);
-      onRegistered(data);
+      toast.success(`Patient "${data.name}" registered successfully!`);
+      setTimeout(() => { setRegistered(false); onRegistered(data); }, 1500);
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     }
