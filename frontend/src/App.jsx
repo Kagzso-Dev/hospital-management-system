@@ -27,6 +27,13 @@ function RequireSuperAdmin({ children }) {
   return children;
 }
 
+// Redirect already-logged-in users away from public pages (hero, login)
+function RedirectIfAuth({ children }) {
+  if (localStorage.getItem('superadmin_token')) return <Navigate to="/superadmin" replace />;
+  if (localStorage.getItem('tenant_token')) return <Navigate to="/home" replace />;
+  return children;
+}
+
 function PageTransition({ children }) {
   const { pathname } = useLocation();
   return (
@@ -41,11 +48,11 @@ function AppLayout() {
     <>
       <PageLoader />
       <Routes>
-        {/* Public: splash hero */}
-        <Route path="/" element={<HeroPage />} />
+        {/* Public: splash hero — redirect to home if already logged in */}
+        <Route path="/" element={<RedirectIfAuth><HeroPage /></RedirectIfAuth>} />
 
-        {/* Public: tenant login */}
-        <Route path="/login" element={<TenantLogin />} />
+        {/* Public: tenant login — redirect to home if already logged in */}
+        <Route path="/login" element={<RedirectIfAuth><TenantLogin /></RedirectIfAuth>} />
 
         {/* Protected: superadmin panel */}
         <Route path="/superadmin" element={<RequireSuperAdmin><SuperAdminPage /></RequireSuperAdmin>} />

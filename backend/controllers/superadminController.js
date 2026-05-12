@@ -79,4 +79,26 @@ const updateTenantPassword = async (req, res) => {
   }
 };
 
-module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword };
+const deleteTenant = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [[tenant]] = await db.query('SELECT id FROM tenants WHERE id = ?', [id]);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+    // Delete all tenant data in order (FK safe)
+    await db.execute('DELETE FROM payments         WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM prescription_items WHERE prescription_id IN (SELECT id FROM prescriptions WHERE tenant_id = ?)', [id]);
+    await db.execute('DELETE FROM prescriptions    WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM appointments     WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM doctor_availability WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM doctors          WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM patients         WHERE tenant_id = ?', [id]);
+    await db.execute('DELETE FROM tenants          WHERE id = ?', [id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, deleteTenant };

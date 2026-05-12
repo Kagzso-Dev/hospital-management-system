@@ -17,13 +17,13 @@ export default function TenantLogin() {
       const res = await tenantLogin(form);
       localStorage.setItem('tenant_token', res.data.token);
       localStorage.setItem('tenant_info', JSON.stringify(res.data.tenant));
-      navigate('/home');
+      navigate('/home', { replace: true });
     } catch (err) {
       if (err.response?.status === 401) {
         try {
           const saRes = await superadminLogin(form);
           localStorage.setItem('superadmin_token', saRes.data.token);
-          navigate('/superadmin');
+          navigate('/superadmin', { replace: true });
           return;
         } catch {
           // fall through

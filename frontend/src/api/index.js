@@ -35,6 +35,7 @@ export const getSuperadminTenants = () => saApi.get('/tenants');
 export const createTenant = (data) => saApi.post('/tenants', data);
 export const updateTenantStatus = (id, status) => saApi.put(`/tenants/${id}/status`, { status });
 export const updateTenantPassword = (id, password) => saApi.put(`/tenants/${id}/password`, { password });
+export const deleteTenant = (id) => saApi.delete(`/tenants/${id}`);
 
 // Patients
 export const searchPatients = (params) => api.get('/patients', { params });
