@@ -19,29 +19,27 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           // React core — always needed, cache long-term
-          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
             return 'vendor-react';
           }
           // Router — loaded once, changes rarely
-          if (id.includes('node_modules/react-router-dom/') || id.includes('node_modules/react-router/')) {
+          if (id.includes('node_modules/react-router-dom/') || id.includes('node_modules/react-router/') || id.includes('node_modules/@remix-run/')) {
             return 'vendor-router';
           }
-          // Charts — only used in Admin/Analytics, split out so other pages don't pay the cost
-          if (id.includes('node_modules/recharts/') || id.includes('node_modules/d3-')) {
+          // Charts — only used in Admin/Analytics
+          if (id.includes('node_modules/recharts/') || id.includes('node_modules/d3-') || id.includes('node_modules/d3/') || id.includes('node_modules/victory-vendor/')) {
             return 'vendor-charts';
           }
           // Socket.io — only used in DoctorDashboard
-          if (id.includes('node_modules/socket.io-client/') || id.includes('node_modules/engine.io-client/')) {
+          if (id.includes('node_modules/socket.io-client/') || id.includes('node_modules/engine.io-client/') || id.includes('node_modules/@socket.io/')) {
             return 'vendor-socket';
           }
-          // Axios — shared utility, small
-          if (id.includes('node_modules/axios/')) {
+          // Axios — shared utility
+          if (id.includes('node_modules/axios/') || id.includes('node_modules/follow-redirects/')) {
             return 'vendor-axios';
           }
-          // Everything else in node_modules gets its own vendor chunk
-          if (id.includes('node_modules/')) {
-            return 'vendor-misc';
-          }
+          // Do NOT add a catch-all for node_modules — let Rollup handle the rest
+          // to avoid circular chunk dependencies
         },
       },
     },
