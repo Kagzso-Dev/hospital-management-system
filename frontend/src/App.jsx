@@ -20,6 +20,13 @@ function RequireAuth({ children }) {
   return children;
 }
 
+function RequireSuperAdmin({ children }) {
+  const token = localStorage.getItem('superadmin_token');
+  const location = useLocation();
+  if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
+  return children;
+}
+
 function PageTransition({ children }) {
   const { pathname } = useLocation();
   return (
@@ -40,8 +47,8 @@ function AppLayout() {
         {/* Public: tenant login */}
         <Route path="/login" element={<TenantLogin />} />
 
-        {/* Public: superadmin panel */}
-        <Route path="/superadmin" element={<SuperAdminPage />} />
+        {/* Protected: superadmin panel */}
+        <Route path="/superadmin" element={<RequireSuperAdmin><SuperAdminPage /></RequireSuperAdmin>} />
 
         {/* Public: token TV display (accessed by doctor_id, no login needed) */}
         <Route path="/token/:doctorId" element={<TokenDisplay />} />

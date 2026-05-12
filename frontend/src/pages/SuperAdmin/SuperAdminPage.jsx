@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { superadminLogin, getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword } from '../../api';
+import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword } from '../../api';
 
 /* ── Shared dark background ── */
 function PageWrap({ children }) {
@@ -11,98 +11,6 @@ function PageWrap({ children }) {
     >
       {children}
     </div>
-  );
-}
-
-/* ── Login ── */
-function LoginView({ onLogin }) {
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showPwd, setShowPwd] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const res = await superadminLogin(form);
-      localStorage.setItem('superadmin_token', res.data.token);
-      onLogin();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <PageWrap>
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-sm">
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-500 px-8 pt-6 pb-6 text-center relative">
-              <button onClick={() => navigate('/login')}
-                className="absolute top-4 left-4 flex items-center gap-1 text-white/70 hover:text-white text-xs font-medium transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back
-              </button>
-              <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-3 mt-2">
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-              </div>
-              <h1 className="text-xl font-bold text-white">Superadmin</h1>
-              <p className="text-purple-100 text-sm mt-0.5">Manage all hospital tenants</p>
-            </div>
-
-            {/* Form */}
-            <div className="px-8 py-7">
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label className="block text-gray-700 text-sm font-semibold mb-1.5">Username</label>
-                  <input type="text" required autoFocus value={form.username}
-                    onChange={(e) => setForm({ ...form, username: e.target.value })}
-                    placeholder="superadmin"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition text-sm" />
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-sm font-semibold mb-1.5">Password</label>
-                  <div className="relative">
-                    <input type={showPwd ? 'text' : 'password'} required value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      placeholder="••••••••"
-                      className="w-full px-4 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition text-sm" />
-                    <button type="button" onClick={() => setShowPwd(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showPwd
-                        ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                        : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>}
-                    </button>
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">
-                    <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                    {error}
-                  </div>
-                )}
-
-                <button type="submit" disabled={loading}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-semibold text-sm transition disabled:opacity-60 shadow-lg active:scale-[0.98]">
-                  {loading ? 'Signing in...' : 'Sign In'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    </PageWrap>
   );
 }
 
@@ -274,7 +182,9 @@ function TenantCard({ tenant, onStatusChange }) {
 }
 
 /* ── Dashboard ── */
-function Dashboard({ onLogout }) {
+function Dashboard() {
+  const navigate = useNavigate();
+  const onLogout = () => { localStorage.removeItem('superadmin_token'); navigate('/login'); };
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -283,9 +193,9 @@ function Dashboard({ onLogout }) {
   useEffect(() => {
     getSuperadminTenants()
       .then((res) => setTenants(res.data))
-      .catch(() => { localStorage.removeItem('superadmin_token'); onLogout(); })
+      .catch(() => { localStorage.removeItem('superadmin_token'); navigate('/login'); })
       .finally(() => setLoading(false));
-  }, [onLogout]);
+  }, [navigate]);
 
   const handleStatusChange = (id, status) =>
     setTenants(prev => prev.map(t => t.id === id ? { ...t, status } : t));
@@ -377,7 +287,5 @@ function Dashboard({ onLogout }) {
 
 /* ── Root ── */
 export default function SuperAdminPage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('superadmin_token'));
-  const handleLogout = () => { localStorage.removeItem('superadmin_token'); setIsLoggedIn(false); };
-  return isLoggedIn ? <Dashboard onLogout={handleLogout} /> : <LoginView onLogin={() => setIsLoggedIn(true)} />;
+  return <Dashboard />;
 }

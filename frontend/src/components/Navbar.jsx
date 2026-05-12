@@ -145,9 +145,9 @@ export default function Navbar() {
           {/* ── Right: action buttons ── */}
           <div className="flex items-center gap-1 xs:gap-1.5 flex-shrink-0">
 
-            {/* Back */}
+            {/* Back — stays within app, never goes to login */}
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/home')}
               className="flex items-center gap-1 xs:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-white/10 hover:bg-white/20 active:scale-95 transition-all"
               title="Go back"
             >

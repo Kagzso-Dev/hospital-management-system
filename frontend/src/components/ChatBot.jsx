@@ -111,24 +111,32 @@ function matchKB(text) {
   return null;
 }
 
+// ── Sensitive info guard ──────────────────────────────────────────────────────
+const SENSITIVE = /revenue|income|earning|profit|collection|total.*fee|fee.*total|fee.*amount|amount.*fee|payment.*total|total.*payment|consultation.*fee|fee.*consult|how much.*doctor|doctor.*charge|patient.*detail|patient.*address|patient.*phone|patient.*personal|patient.*info|patient.*record|patient.*data|financial|billing.*report|report.*billing|money.*collect|collect.*money/i;
+
 // ── Live data handlers ────────────────────────────────────────────────────────
 async function getLiveReply(text) {
   const t = text.toLowerCase();
+
+  // Block sensitive queries
+  if (SENSITIVE.test(t)) {
+    return "Hey, I totally get the curiosity 😊 but that kind of info is private and I'm not able to share it. Is there anything else I can help you with?";
+  }
 
   // Doctors list
   if (/doctor.*list|list.*doctor|available.*doctor|doctor.*available|who.*doctor|our.*doctor|show.*doctor|all.*doctor/i.test(t)) {
     try {
       const { data } = await getDoctors();
-      if (!data.length) return '🏥 No doctors are registered yet. Please contact admin.';
+      if (!data.length) return "Hmm, no doctors are listed yet! Try reaching out to the reception desk 😊";
       const list = data.map((d) => `• Dr. ${d.name} — ${d.specialization}`).join('\n');
-      return `👨‍⚕️ Our Doctors (${data.length}):\n\n${list}\n\n📋 Visit Reception to book an appointment!`;
+      return `Here are our doctors! 👨‍⚕️\n\n${list}\n\nHead to Reception to grab a slot with any of them 🙌`;
     } catch {
-      return '⚠️ Could not fetch doctor list right now. Please visit the Reception desk.';
+      return "Couldn't pull the doctor list right now — try checking with Reception directly 😊";
     }
   }
 
-  // Today's stats
-  if (/today.*patient|patient.*today|how many patient|appointment.*today|today.*appointment|today.*stat|stat.*today|count.*patient/i.test(t)) {
+  // Today's appointment counts (no patient names/details)
+  if (/today.*patient|patient.*today|how many patient|appointment.*today|today.*appointment|today.*stat|stat.*today|count.*patient|busy.*today|queue.*today/i.test(t)) {
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data } = await getAppointments({ date: today });
@@ -136,20 +144,20 @@ async function getLiveReply(text) {
       const completed = data.filter((a) => a.status === 'completed').length;
       const waiting   = data.filter((a) => a.status === 'waiting').length;
       const progress  = data.filter((a) => a.status === 'in_progress').length;
-      return `📊 Today's Hospital Stats (${today}):\n\n• Total appointments: ${total}\n• ✅ Completed: ${completed}\n• ⏳ Waiting: ${waiting}\n• 🔄 In progress: ${progress}\n\nData fetched live from hospital system! ✅`;
+      return `Today's quick snapshot 📊\n\n• Total appointments: ${total}\n• ✅ Done: ${completed}\n• ⏳ Waiting: ${waiting}\n• 🔄 With doctor: ${progress}\n\nLive from the system! 🚀`;
     } catch {
-      return '⚠️ Could not fetch today\'s stats. Please check the Admin panel.';
+      return "Can't grab today's stats at the moment — the system might be busy. Try again in a bit! 😊";
     }
   }
 
   // Book appointment
-  if (/book.*appointment|make.*appointment|appointment.*book/i.test(t)) {
-    return '📋 To book an appointment:\n\n1. Click "Access Portal" or go to Reception\n2. Search for the patient (or register if new)\n3. Select doctor and available slot\n4. Confirm booking — token will be generated automatically!\n\nNeed help? Just ask 😊';
+  if (/book.*appointment|make.*appointment|appointment.*book|schedule.*appointment/i.test(t)) {
+    return "Sure! Here's how to book 📋\n\n1. Go to Reception\n2. Search for the patient (or register if first visit)\n3. Pick a doctor and a free slot\n4. Confirm — token gets generated instantly!\n\nSuper easy 😊 Let me know if you need help!";
   }
 
   // Register patient
   if (/register.*patient|new.*patient|add.*patient/i.test(t)) {
-    return '🆕 To register a new patient:\n\n1. Go to Reception page\n2. Click "Register New Patient"\n3. Fill in name, phone, age, gender\n4. Optionally scan Aadhaar/ID for auto-fill\n5. Save — then book an appointment!\n\nVisit Reception to get started 👉';
+    return "Easy peasy! To add a new patient 🆕\n\n1. Head to Reception\n2. Hit 'Register New Patient'\n3. Fill in name, phone, age, gender\n4. Scan Aadhaar/ID for auto-fill (optional)\n5. Done — then book an appointment!\n\nAny other questions? 😊";
   }
 
   return null;
@@ -196,14 +204,13 @@ function TypingIndicator() {
   );
 }
 
-const QUICK = ['Doctors list', "Today's patients", 'Book appointment', 'Fever', 'First aid', 'Stress'];
 const nowTime = () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
 // ── Main ChatBot ──────────────────────────────────────────────────────────────
 export default function ChatBot() {
   const [open, setOpen]       = useState(false);
   const [messages, setMessages] = useState([
-    { from: 'bot', text: "Hi! 👋 I'm MedBot — your hospital AI assistant.\n\nI can answer health questions AND fetch live data like doctor lists and today's appointment stats.\n\nHow can I help you?", time: nowTime() },
+    { from: 'bot', text: "Hey! 👋 I'm MedBot — think of me as your friendly health buddy!\n\nAsk me anything — symptoms, medicines, first aid, diet, mental health, or even who's available today. I've got you 😊\n\nWhat's on your mind?", time: nowTime() },
   ]);
   const [input, setInput]     = useState('');
   const [typing, setTyping]   = useState(false);
@@ -233,7 +240,7 @@ export default function ChatBot() {
     // Try live data first, then offline KB
     let reply = await getLiveReply(userText);
     if (!reply) {
-      reply = matchKB(userText) ?? "I'm not sure about that, but I'm here to help! 😊\n\nTry asking:\n• 'Doctors list' — see all doctors\n• 'Today's patients' — live stats\n• Symptoms like fever, headache, cough\n• First aid, diet, mental health tips";
+      reply = matchKB(userText) ?? "Hmm, I'm not quite sure about that one 😅 But I'm always learning!\n\nYou can ask me about symptoms, medicines, first aid, diet, sleep, stress — or hospital stuff like the doctor list or today's appointments. Just try me! 😊";
     }
 
     setTyping(false);
@@ -307,19 +314,6 @@ export default function ChatBot() {
             {messages.map((m, i) => <Bubble key={i} msg={m} />)}
             {typing && <TypingIndicator />}
             <div ref={bottomRef} />
-          </div>
-
-          {/* Quick replies */}
-          <div className="flex gap-1.5 px-3 py-2 overflow-x-auto bg-gray-50 border-t border-gray-100 flex-shrink-0">
-            {QUICK.map((q) => (
-              <button
-                key={q}
-                onClick={() => sendMessage(q)}
-                className="flex-shrink-0 px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium border border-blue-200 transition-all active:scale-95"
-              >
-                {q}
-              </button>
-            ))}
           </div>
 
           {/* Input */}
