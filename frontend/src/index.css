@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes bgZoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.1); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.4); opacity: 0.6; }
+}
+
+.bg-zoom        { animation: bgZoom 12s ease-in-out infinite alternate; }
+.animate-fade-up   { animation: fadeUp   0.45s ease-out both; }
+.animate-fade-in   { animation: fadeIn   0.35s ease-out both; }
+.animate-slide-left{ animation: slideInLeft 0.35s ease-out both; }
+.animate-scale-in  { animation: scaleIn  0.3s  ease-out both; }
+
+/* stagger helpers */
+.delay-75  { animation-delay: 75ms;  }
+.delay-150 { animation-delay: 150ms; }
+.delay-225 { animation-delay: 225ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-375 { animation-delay: 375ms; }
+.delay-450 { animation-delay: 450ms; }
+
+/* skeleton shimmer */
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+@layer base {
+  html { 
+    @apply scroll-smooth; 
+    font-size: 14px; /* Base for mobile */
+  }
+  @screen sm {
+    html { font-size: 16px; } /* Base for desktop */
+  }
+
+  body {
+    @apply text-gray-800 font-sans min-h-screen antialiased;
+    line-height: 1.5;
+    background-color: #0f172a;
+  }
+  
+  * { 
+    -webkit-tap-highlight-color: transparent; 
+    box-sizing: border-box; 
+  }
+  
+  img { @apply max-w-full h-auto; }
+
+  /* Fluid headings */
+  h1 { font-size: clamp(1.5rem, 5vw, 2.5rem); }
+  h2 { font-size: clamp(1.25rem, 4vw, 2rem); }
+  h3 { font-size: clamp(1.1rem, 3vw, 1.5rem); }
+
+  /* Fix for 'appearance' warning in Tailwind's Preflight */
+  button, [type='button'], [type='reset'], [type='submit'] {
+    appearance: button;
+  }
+
+  /* hide scrollbar everywhere while keeping scroll functional */
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+}
+
+/* ── Components ─────────────────────────────────────────────────────────── */
+@layer components {
+  .btn-primary   { @apply bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold text-sm sm:text-base flex items-center justify-center gap-2; min-height: 44px; }
+  .btn-secondary { @apply bg-white/80 text-gray-700 border border-white/60 px-4 py-2.5 rounded-xl hover:bg-white active:scale-95 transition-all font-semibold backdrop-blur-sm text-sm sm:text-base flex items-center justify-center gap-2; min-height: 44px; }
+  .btn-success   { @apply bg-green-600 text-white px-4 py-2.5 rounded-xl hover:bg-green-700 active:scale-95 transition-all font-semibold text-sm sm:text-base flex items-center justify-center gap-2; min-height: 44px; }
+  .btn-danger    { @apply bg-red-600   text-white px-4 py-2.5 rounded-xl hover:bg-red-700   active:scale-95 transition-all font-semibold text-sm sm:text-base flex items-center justify-center gap-2; min-height: 44px; }
+
+  .card  { @apply bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-white/60 p-4 sm:p-6; }
+  .input { @apply w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white/50 backdrop-blur-sm transition-all; min-height: 44px; }
+  .label { @apply block text-sm font-semibold text-gray-600 mb-1.5 ml-1; }
+
+  .page-title { @apply font-black text-white drop-shadow-xl tracking-tight; }
+  .page-sub   { @apply text-sm sm:text-base text-white/90 mt-1 font-medium drop-shadow-md; }
+
+  /* full-bleed bg helper — attach to every page wrapper */
+  .page-bg {
+    @apply relative min-h-screen flex flex-col overflow-x-hidden p-0 m-0;
+  }
+
+  /* Responsive Grids */
+  .grid-auto-fit {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 1rem;
+  }
+
+  .badge-waiting     { @apply inline-flex items-center px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-yellow-100 text-yellow-800 uppercase tracking-wider; }
+  .badge-in_progress { @apply inline-flex items-center px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-blue-100   text-blue-800   uppercase tracking-wider; }
+  .badge-completed   { @apply inline-flex items-center px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-green-100  text-green-800  uppercase tracking-wider; }
+  .badge-cancelled   { @apply inline-flex items-center px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-gray-100   text-gray-600   uppercase tracking-wider; }
+}
+
+/* ── Print ──────────────────────────────────────────────────────────────── */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: fixed; top: 0; left: 0; width: 100%; }
+}

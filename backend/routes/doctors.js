@@ -1,0 +1,10 @@
+const router = require('express').Router();
+const { tenantAuth } = require('../middleware/tenantAuth');
+const { getDoctors, createDoctor, deleteDoctor, verifyDoctorPassword, getAvailableSlots, setAvailability } = require('../controllers/doctorController');
+router.get('/', tenantAuth, getDoctors);
+router.post('/', tenantAuth, createDoctor);
+router.delete('/:id', tenantAuth, deleteDoctor);
+router.post('/:id/verify', tenantAuth, verifyDoctorPassword);
+router.get('/:id/slots', tenantAuth, getAvailableSlots);
+router.post('/:id/availability', tenantAuth, setAvailability);
+module.exports = router;
