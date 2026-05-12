@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, deleteTenant } from '../../api';
+import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, deleteTenant } from '../../api';
 
 /* ── Shared dark background ── */
 function PageWrap({ children }) {
@@ -99,12 +99,17 @@ function CreateTenantModal({ onClose, onCreate }) {
 }
 
 /* ── Tenant Card ── */
-function TenantCard({ tenant, onStatusChange, onDelete }) {
+function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange, onDelete }) {
   const [resetting, setResetting] = useState(false);
   const [newPwd, setNewPwd] = useState('');
   const [showReset, setShowReset] = useState(false);
+  const [changingUser, setChangingUser] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [showChangeUser, setShowChangeUser] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [revealPwd, setRevealPwd] = useState(false);
+  const [revealUser, setRevealUser] = useState(false);
   const isActive = tenant.status === 'active';
 
   const toggleStatus = async () => {
@@ -122,12 +127,28 @@ function TenantCard({ tenant, onStatusChange, onDelete }) {
     setResetting(true);
     try {
       await updateTenantPassword(tenant.id, newPwd);
+      onPasswordChange(tenant.id, newPwd);
       setShowReset(false);
       setNewPwd('');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleChangeUsername = async () => {
+    if (!newUsername || newUsername.trim().length < 3) return alert('Username must be at least 3 characters');
+    setChangingUser(true);
+    try {
+      const res = await updateTenantUsername(tenant.id, newUsername.trim());
+      onUsernameChange(tenant.id, res.data.username);
+      setShowChangeUser(false);
+      setNewUsername('');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed');
+    } finally {
+      setChangingUser(false);
     }
   };
 
@@ -164,6 +185,40 @@ function TenantCard({ tenant, onStatusChange, onDelete }) {
         </div>
       </div>
 
+      {/* Credentials row */}
+      <div className="grid grid-cols-2 divide-x divide-white/10 border-b border-white/10 bg-black/20">
+        {/* Username */}
+        <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white/30 text-[10px] mb-0.5">Username</p>
+            <p className="text-cyan-300 text-xs font-mono truncate">
+              {revealUser ? tenant.username : '•'.repeat(Math.min(tenant.username.length, 12))}
+            </p>
+          </div>
+          <button onClick={() => setRevealUser(v => !v)} className="text-white/30 hover:text-white/70 transition shrink-0">
+            {revealUser
+              ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+              : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            }
+          </button>
+        </div>
+        {/* Password */}
+        <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white/30 text-[10px] mb-0.5">Password</p>
+            <p className="text-pink-300 text-xs font-mono truncate">
+              {revealPwd ? tenant.password : '•'.repeat(Math.min((tenant.password || '').length, 12))}
+            </p>
+          </div>
+          <button onClick={() => setRevealPwd(v => !v)} className="text-white/30 hover:text-white/70 transition shrink-0">
+            {revealPwd
+              ? <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+              : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            }
+          </button>
+        </div>
+      </div>
+
       {/* Stats row */}
       <div className="grid grid-cols-2 divide-x divide-white/10 border-b border-white/10">
         <div className="px-5 py-3 text-center">
@@ -182,11 +237,15 @@ function TenantCard({ tenant, onStatusChange, onDelete }) {
           className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold transition ${isActive ? 'bg-red-400/15 text-red-400 hover:bg-red-400/25 border border-red-400/30' : 'bg-green-400/15 text-green-400 hover:bg-green-400/25 border border-green-400/30'}`}>
           {isActive ? 'Suspend' : 'Activate'}
         </button>
-        <button onClick={() => { setShowReset(v => !v); setConfirmDelete(false); }}
+        <button onClick={() => { setShowReset(v => !v); setShowChangeUser(false); setConfirmDelete(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-white/10 text-white/70 hover:bg-white/20 border border-white/20 transition">
           Reset Pwd
         </button>
-        <button onClick={() => { setConfirmDelete(true); setShowReset(false); }}
+        <button onClick={() => { setShowChangeUser(v => !v); setShowReset(false); setConfirmDelete(false); }}
+          className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-cyan-400/15 text-cyan-300 hover:bg-cyan-400/25 border border-cyan-400/30 transition">
+          Username
+        </button>
+        <button onClick={() => { setConfirmDelete(true); setShowReset(false); setShowChangeUser(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-400/30 transition">
           Delete
         </button>
@@ -201,6 +260,19 @@ function TenantCard({ tenant, onStatusChange, onDelete }) {
           <button onClick={handleReset} disabled={resetting}
             className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold disabled:opacity-60 transition">
             {resetting ? '...' : 'Save'}
+          </button>
+        </div>
+      )}
+
+      {/* Change username panel */}
+      {showChangeUser && (
+        <div className="px-5 pb-4 flex gap-2 border-t border-white/10 pt-3">
+          <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)}
+            placeholder={`New username (current: @${tenant.username})`}
+            className="flex-1 px-3 py-2 rounded-lg border border-cyan-400/30 bg-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 transition" />
+          <button onClick={handleChangeUsername} disabled={changingUser}
+            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold disabled:opacity-60 transition">
+            {changingUser ? '...' : 'Save'}
           </button>
         </div>
       )}
@@ -244,6 +316,12 @@ function Dashboard() {
 
   const handleStatusChange = (id, status) =>
     setTenants(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+
+  const handleUsernameChange = (id, username) =>
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, username } : t));
+
+  const handlePasswordChange = (id, password) =>
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, password } : t));
 
   const handleDelete = (id) =>
     setTenants(prev => prev.filter(t => t.id !== id));
@@ -314,7 +392,7 @@ function Dashboard() {
           ) : (
             <div className="space-y-3">
               {filtered.map(t => (
-                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onDelete={handleDelete} />
+                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onUsernameChange={handleUsernameChange} onPasswordChange={handlePasswordChange} onDelete={handleDelete} />
               ))}
             </div>
           )}

@@ -23,7 +23,7 @@ const superadminLogin = async (req, res) => {
 const listTenants = async (req, res) => {
   try {
     const [tenants] = await db.query(
-      `SELECT t.id, t.name, t.username, t.status, t.created_at,
+      `SELECT t.id, t.name, t.username, t.password, t.status, t.created_at,
         (SELECT COUNT(*) FROM doctors d WHERE d.tenant_id = t.id AND d.is_active = 1) AS doctor_count,
         (SELECT COUNT(*) FROM patients p WHERE p.tenant_id = t.id) AS patient_count
        FROM tenants t ORDER BY t.id`
@@ -79,6 +79,22 @@ const updateTenantPassword = async (req, res) => {
   }
 };
 
+const updateTenantUsername = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username } = req.body;
+    if (!username || username.trim().length < 3) return res.status(400).json({ error: 'Username must be at least 3 characters' });
+
+    const [[existing]] = await db.query('SELECT id FROM tenants WHERE username = ? AND id != ?', [username.trim(), id]);
+    if (existing) return res.status(409).json({ error: 'Username already taken' });
+
+    await db.execute('UPDATE tenants SET username = ? WHERE id = ?', [username.trim(), id]);
+    res.json({ ok: true, username: username.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 const deleteTenant = async (req, res) => {
   try {
     const { id } = req.params;
@@ -101,4 +117,4 @@ const deleteTenant = async (req, res) => {
   }
 };
 
-module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, deleteTenant };
+module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, deleteTenant };

@@ -85,7 +85,7 @@ export default function TenantLogin() {
                     autoFocus
                     value={form.username}
                     onChange={(e) => setForm({ ...form, username: e.target.value })}
-                    placeholder="e.g. apollo_hospital"
+                    placeholder="Enter your username"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-white/15 bg-white/10 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/60 focus:border-transparent focus:bg-white/15 transition text-sm"
                   />
                 </div>
