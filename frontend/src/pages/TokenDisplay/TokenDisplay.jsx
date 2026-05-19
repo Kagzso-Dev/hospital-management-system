@@ -335,8 +335,10 @@ export default function TokenDisplay() {
 
   useEffect(() => {
     refresh();
+    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
-    socket.on('token_update', ({ doctor_id }) => {
+    socket.on(`token_update_${tenantId}`, ({ doctor_id }) => {
       if (String(doctor_id) === String(doctorId)) refresh();
     });
     const poll  = setInterval(refresh, 10000);

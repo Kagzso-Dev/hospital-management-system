@@ -31,11 +31,8 @@ const createPatient = async (req, res) => {
         [tenantId, name, age || null, dob || null, gender || null, phone, address || null]
       );
       const id = result.insertId;
-      // Use global max to avoid UNIQUE constraint collision across tenants
-      const [[{ maxNum }]] = await conn.query(
-        "SELECT COALESCE(MAX(CAST(SUBSTRING(patient_id, 4) AS UNSIGNED)), 0) AS maxNum FROM patients WHERE patient_id IS NOT NULL AND patient_id != ''"
-      );
-      const patient_id = `PAT${String(maxNum + 1).padStart(6, '0')}`;
+      // Use auto-increment ID to prevent race conditions and duplicate patient IDs
+      const patient_id = `PAT${String(id + 100000).padStart(6, '0')}`;
       await conn.execute('UPDATE patients SET patient_id = ? WHERE id = ?', [patient_id, id]);
       const [[p]] = await conn.query('SELECT * FROM patients WHERE id = ?', [id]);
       patient = p;

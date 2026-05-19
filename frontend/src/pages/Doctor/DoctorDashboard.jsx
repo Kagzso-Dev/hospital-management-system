@@ -245,8 +245,10 @@ export default function DoctorDashboard() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
-    socket.on('token_update', (data) => {
+    socket.on(`token_update_${tenantId}`, (data) => {
       if (!data.doctor_id || String(data.doctor_id) === String(id)) {
         load(true); // Silent refresh
       }

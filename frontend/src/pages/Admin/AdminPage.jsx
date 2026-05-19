@@ -1036,8 +1036,10 @@ function TokenBoardView() {
 
   useEffect(() => {
     load();
+    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
-    socket.on('token_update', load);
+    socket.on(`token_update_${tenantId}`, load);
     const poll  = setInterval(load, 10000);
     const clock = setInterval(() => setTime(new Date()), 1000);
     return () => { socket.disconnect(); clearInterval(poll); clearInterval(clock); };
