@@ -95,6 +95,19 @@ const updateTenantUsername = async (req, res) => {
   }
 };
 
+const updateTenantName = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name || name.trim().length < 2) return res.status(400).json({ error: 'Name must be at least 2 characters' });
+
+    await db.execute('UPDATE tenants SET name = ? WHERE id = ?', [name.trim(), id]);
+    res.json({ ok: true, name: name.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 const deleteTenant = async (req, res) => {
   try {
     const { id } = req.params;
@@ -117,4 +130,4 @@ const deleteTenant = async (req, res) => {
   }
 };
 
-module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, deleteTenant };
+module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant };

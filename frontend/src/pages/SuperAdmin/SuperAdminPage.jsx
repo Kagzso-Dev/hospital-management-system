@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, deleteTenant } from '../../api';
+import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant } from '../../api';
 
 /* ── Shared dark background ── */
 function PageWrap({ children }) {
@@ -99,18 +99,36 @@ function CreateTenantModal({ onClose, onCreate }) {
 }
 
 /* ── Tenant Card ── */
-function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange, onDelete }) {
+function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange, onNameChange, onDelete }) {
   const [resetting, setResetting] = useState(false);
   const [newPwd, setNewPwd] = useState('');
   const [showReset, setShowReset] = useState(false);
   const [changingUser, setChangingUser] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [showChangeUser, setShowChangeUser] = useState(false);
+  const [changingName, setChangingName] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [showChangeName, setShowChangeName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [revealPwd, setRevealPwd] = useState(false);
   const [revealUser, setRevealUser] = useState(false);
   const isActive = tenant.status === 'active';
+
+  const handleChangeName = async () => {
+    if (!newName || newName.trim().length < 2) return alert('Name must be at least 2 characters');
+    setChangingName(true);
+    try {
+      const res = await updateTenantName(tenant.id, newName.trim());
+      onNameChange(tenant.id, res.data.name);
+      setShowChangeName(false);
+      setNewName('');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed');
+    } finally {
+      setChangingName(false);
+    }
+  };
 
   const toggleStatus = async () => {
     const next = isActive ? 'suspended' : 'active';
@@ -237,15 +255,19 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
           className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold transition ${isActive ? 'bg-red-400/15 text-red-400 hover:bg-red-400/25 border border-red-400/30' : 'bg-green-400/15 text-green-400 hover:bg-green-400/25 border border-green-400/30'}`}>
           {isActive ? 'Suspend' : 'Activate'}
         </button>
-        <button onClick={() => { setShowReset(v => !v); setShowChangeUser(false); setConfirmDelete(false); }}
-          className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-white/10 text-white/70 hover:bg-white/20 border border-white/20 transition">
-          Reset Pwd
-        </button>
-        <button onClick={() => { setShowChangeUser(v => !v); setShowReset(false); setConfirmDelete(false); }}
+        <button onClick={() => { setShowChangeUser(v => !v); setShowReset(false); setShowChangeName(false); setConfirmDelete(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-cyan-400/15 text-cyan-300 hover:bg-cyan-400/25 border border-cyan-400/30 transition">
           Username
         </button>
-        <button onClick={() => { setConfirmDelete(true); setShowReset(false); setShowChangeUser(false); }}
+        <button onClick={() => { setShowReset(v => !v); setShowChangeUser(false); setShowChangeName(false); setConfirmDelete(false); }}
+          className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-white/10 text-white/70 hover:bg-white/20 border border-white/20 transition">
+          Reset Pwd
+        </button>
+        <button onClick={() => { setShowChangeName(v => !v); setShowReset(false); setShowChangeUser(false); setConfirmDelete(false); }}
+          className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-purple-400/15 text-purple-300 hover:bg-purple-400/25 border border-purple-400/30 transition">
+          Edit Name
+        </button>
+        <button onClick={() => { setConfirmDelete(true); setShowReset(false); setShowChangeUser(false); setShowChangeName(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-400/30 transition">
           Delete
         </button>
@@ -273,6 +295,19 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
           <button onClick={handleChangeUsername} disabled={changingUser}
             className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold disabled:opacity-60 transition">
             {changingUser ? '...' : 'Save'}
+          </button>
+        </div>
+      )}
+
+      {/* Change name panel */}
+      {showChangeName && (
+        <div className="px-5 pb-4 flex gap-2 border-t border-white/10 pt-3">
+          <input value={newName} onChange={(e) => setNewName(e.target.value)}
+            placeholder={`New name (current: ${tenant.name})`}
+            className="flex-1 px-3 py-2 rounded-lg border border-purple-400/30 bg-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition" />
+          <button onClick={handleChangeName} disabled={changingName}
+            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold disabled:opacity-60 transition">
+            {changingName ? '...' : 'Save'}
           </button>
         </div>
       )}
@@ -322,6 +357,9 @@ function Dashboard() {
 
   const handlePasswordChange = (id, password) =>
     setTenants(prev => prev.map(t => t.id === id ? { ...t, password } : t));
+
+  const handleNameChange = (id, name) =>
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, name } : t));
 
   const handleDelete = (id) =>
     setTenants(prev => prev.filter(t => t.id !== id));
@@ -392,7 +430,7 @@ function Dashboard() {
           ) : (
             <div className="space-y-3">
               {filtered.map(t => (
-                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onUsernameChange={handleUsernameChange} onPasswordChange={handlePasswordChange} onDelete={handleDelete} />
+                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onUsernameChange={handleUsernameChange} onPasswordChange={handlePasswordChange} onNameChange={handleNameChange} onDelete={handleDelete} />
               ))}
             </div>
           )}

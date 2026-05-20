@@ -36,6 +36,7 @@ export const createTenant = (data) => saApi.post('/tenants', data);
 export const updateTenantStatus = (id, status) => saApi.put(`/tenants/${id}/status`, { status });
 export const updateTenantPassword = (id, password) => saApi.put(`/tenants/${id}/password`, { password });
 export const updateTenantUsername = (id, username) => saApi.put(`/tenants/${id}/username`, { username });
+export const updateTenantName = (id, name) => saApi.put(`/tenants/${id}/name`, { name });
 export const deleteTenant = (id) => saApi.delete(`/tenants/${id}`);
 
 // Patients

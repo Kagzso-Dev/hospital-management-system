@@ -913,4 +913,21 @@ describe('11. Superadmin – Tenant Management', () => {
       .send({ name: 'No Creds' }); // missing username and password
     expect(res.status).toBe(400);
   });
+
+  test('11.8 Update tenant name succeeds', async () => {
+    const res = await request(app)
+      .put(`/api/superadmin/tenants/${newTenantId}/name`)
+      .set('Authorization', `Bearer ${saToken}`)
+      .send({ name: 'Updated Hospital Name' });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Updated Hospital Name');
+  });
+
+  test('11.9 Update tenant name with too short name fails (400)', async () => {
+    const res = await request(app)
+      .put(`/api/superadmin/tenants/${newTenantId}/name`)
+      .set('Authorization', `Bearer ${saToken}`)
+      .send({ name: 'a' });
+    expect(res.status).toBe(400);
+  });
 });
