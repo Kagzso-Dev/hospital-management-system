@@ -70,6 +70,15 @@ const getAvailableSlots = async (req, res) => {
     const dayOfWeek = new Date(date + 'T00:00:00').getDay();
     const dow = dayOfWeek === 0 ? 7 : dayOfWeek;
 
+    const getSubstitute = async (subId) => {
+      if (!subId) return null;
+      const [[sub]] = await db.query(
+        'SELECT id, name, specialization, consultation_fee FROM doctors WHERE id = ? AND tenant_id = ?',
+        [subId, req.tenantId]
+      );
+      return sub || null;
+    };
+
     let [rows] = await db.query(
       'SELECT * FROM doctor_availability WHERE doctor_id = ? AND date = ? AND tenant_id = ?',
       [id, date, req.tenantId]
@@ -77,13 +86,21 @@ const getAvailableSlots = async (req, res) => {
     let avail = rows[0];
 
     if (avail) {
-      if (!avail.is_available) return res.json({ slots: [], unavailable: true });
+      if (!avail.is_available) {
+        const substitute = await getSubstitute(avail.substitute_doctor_id);
+        return res.json({ slots: [], unavailable: true, substitute });
+      }
     } else {
+      // Check weekly schedule — include off days so we can return substitute info
       [rows] = await db.query(
-        'SELECT * FROM doctor_availability WHERE doctor_id = ? AND day_of_week = ? AND date IS NULL AND is_available = 1 AND tenant_id = ?',
+        'SELECT * FROM doctor_availability WHERE doctor_id = ? AND day_of_week = ? AND date IS NULL AND tenant_id = ?',
         [id, dow, req.tenantId]
       );
       avail = rows[0];
+      if (avail && !avail.is_available) {
+        const substitute = await getSubstitute(avail.substitute_doctor_id);
+        return res.json({ slots: [], unavailable: true, substitute });
+      }
     }
 
     if (!avail) return res.json({ slots: [], unavailable: false });
@@ -134,4 +151,19 @@ const setAvailability = async (req, res) => {
   }
 };
 
-module.exports = { getDoctors, createDoctor, deleteDoctor, verifyDoctorPassword, getAvailableSlots, setAvailability };
+const updateDoctorFee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const fee = Number(req.body.fee);
+    if (isNaN(fee) || fee < 0) return res.status(400).json({ error: 'Invalid fee amount' });
+    await db.execute(
+      'UPDATE doctors SET consultation_fee = ? WHERE id = ? AND tenant_id = ?',
+      [fee, id, req.tenantId]
+    );
+    res.json({ ok: true, consultation_fee: fee });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getDoctors, createDoctor, deleteDoctor, verifyDoctorPassword, getAvailableSlots, setAvailability, updateDoctorFee };

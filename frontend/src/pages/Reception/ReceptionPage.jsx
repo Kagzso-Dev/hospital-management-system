@@ -1,5 +1,5 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
-import { searchPatients, createPatient, getDoctors, getAvailableSlots, createAppointment } from '../../api';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { searchPatients, createPatient, getDoctors, getAvailableSlots, createAppointment, createReceptionCharge, getPendingProcedureCharges, payProcedureCharge } from '../../api';
 import PaymentStep from './PaymentStep';
 import ReceiptView from './ReceiptView';
 import { useToast } from '../../components/Toast';
@@ -154,6 +154,46 @@ function parseOcrText(raw) {
   }
 
   return { name, age, gender, address, id_number: idNumber, id_type: idType };
+}
+
+const STEP_LABELS = [
+  { keys: ['search', 'register'], label: 'Patient' },
+  { keys: ['book'],               label: 'Appointment' },
+  { keys: ['payment'],            label: 'Payment' },
+  { keys: ['receipt'],            label: 'Done' },
+];
+
+function StepBar({ step }) {
+  const activeIdx = STEP_LABELS.findIndex(s => s.keys.includes(step));
+  return (
+    <div className="flex items-start gap-0 mb-1">
+      {STEP_LABELS.map((s, i) => {
+        const done   = i < activeIdx;
+        const active = i === activeIdx;
+        return (
+          <React.Fragment key={s.label}>
+            <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                done   ? 'bg-green-500 border-green-500 text-white'
+                : active ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-white border-gray-200 text-gray-400'
+              }`}>
+                {done ? '✓' : i + 1}
+              </div>
+              <span className={`text-[10px] font-semibold truncate ${
+                active ? 'text-blue-600' : done ? 'text-green-600' : 'text-gray-400'
+              }`}>{s.label}</span>
+            </div>
+            {i < STEP_LABELS.length - 1 && (
+              <div className={`h-0.5 flex-[2] mx-1 mt-3.5 transition-all rounded-full ${
+                i < activeIdx ? 'bg-green-400' : 'bg-gray-200'
+              }`} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
 }
 
 function PatientCard({ patient, onSelect }) {
@@ -457,6 +497,7 @@ function BookAppointment({ patient, onBooked }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [slots, setSlots] = useState([]);
   const [unavailable, setUnavailable] = useState(false);
+  const [substitute, setSubstitute] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState('');
   const [loading, setLoading] = useState(false);
   const [booked, setBooked] = useState(false);
@@ -472,11 +513,21 @@ function BookAppointment({ patient, onBooked }) {
       setLoadingSlots(true);
       setSelectedSlot('');
       setUnavailable(false);
+      setSubstitute(null);
       getAvailableSlots(selectedDoctor.id, date)
-        .then(({ data }) => { setSlots(data.slots || []); setUnavailable(!!data.unavailable); })
+        .then(({ data }) => {
+          setSlots(data.slots || []);
+          setUnavailable(!!data.unavailable);
+          setSubstitute(data.substitute || null);
+        })
         .finally(() => setLoadingSlots(false));
     }
   }, [selectedDoctor, date]);
+
+  const switchToSubstitute = () => {
+    const sub = doctors.find((d) => d.id === substitute?.id);
+    if (sub) { setSelectedDoctor(sub); setSubstitute(null); }
+  };
 
   const book = async () => {
     if (!selectedDoctor || !selectedSlot) return;
@@ -528,6 +579,9 @@ function BookAppointment({ patient, onBooked }) {
             >
               <div className="font-medium text-sm">{d.name}</div>
               <div className="text-xs text-gray-500">{d.specialization}</div>
+              <div className="text-xs font-bold text-green-600 mt-1">
+                ₹{Number(d.consultation_fee || 0).toLocaleString('en-IN')}
+              </div>
             </button>
           ))}
         </div>
@@ -550,12 +604,48 @@ function BookAppointment({ patient, onBooked }) {
           {loadingSlots ? (
             <div className="text-sm text-gray-500">Loading slots...</div>
           ) : unavailable ? (
-            <div className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2">
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-              Doctor is marked unavailable on this date. Please choose another date or doctor.
-            </div>
+            substitute ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-amber-900 text-sm">
+                      {selectedDoctor.name} is on leave on this date
+                    </div>
+                    <div className="text-amber-700 text-sm mt-0.5">
+                      Covered by:&nbsp;
+                      <span className="font-bold text-amber-900">{substitute.name}</span>
+                      <span className="text-amber-600 ml-1">· {substitute.specialization}</span>
+                    </div>
+                    {substitute.consultation_fee > 0 && (
+                      <div className="text-xs text-amber-600 mt-0.5">
+                        Fee: ₹{Number(substitute.consultation_fee).toLocaleString('en-IN')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={switchToSubstitute}
+                  className="w-full py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Book with Dr. {substitute.name} instead
+                </button>
+              </div>
+            ) : (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 715.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                {selectedDoctor.name} is on leave on this date. Please choose another date or doctor.
+              </div>
+            )
           ) : slots.length === 0 ? (
             <div className="text-sm text-yellow-700 bg-yellow-50 p-2 rounded">No slots available for this date</div>
           ) : (
@@ -581,12 +671,30 @@ function BookAppointment({ patient, onBooked }) {
         </div>
       )}
 
+      {selectedDoctor && selectedSlot && (
+        <div className="flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl px-4 py-3">
+          <div className="text-sm text-slate-600">
+            <div className="font-semibold text-slate-800">{selectedDoctor.name}</div>
+            <div className="text-xs text-slate-500">{selectedSlot} · {selectedDoctor.specialization}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Consultation Fee</div>
+            <div className="text-xl font-black text-green-600">
+              ₹{Number(selectedDoctor.consultation_fee || 0).toLocaleString('en-IN')}
+            </div>
+          </div>
+        </div>
+      )}
+
       <button
         className={`btn-primary w-full flex items-center justify-center gap-2 transition-all ${booked ? 'bg-green-600' : ''}`}
         disabled={!selectedDoctor || !selectedSlot || loading || booked}
         onClick={book}
       >
-        {loading ? 'Booking...' : booked ? '✓ Appointment Booked' : 'Confirm Appointment'}
+        {loading ? 'Booking...' : booked ? '✓ Appointment Booked'
+          : selectedDoctor && selectedSlot
+            ? `Confirm & Pay ₹${Number(selectedDoctor.consultation_fee || 0).toLocaleString('en-IN')}`
+            : 'Confirm Appointment'}
       </button>
     </div>
   );
@@ -612,6 +720,594 @@ function TokenConfirmation({ appointment, onNewBooking }) {
       </div>
       <button className="btn-primary w-full" onClick={onNewBooking}>New Appointment</button>
     </div>
+  );
+}
+
+const PROC_LABELS = ['Blood Test', 'ECG', 'X-Ray', 'Ultrasound', 'Dressing', 'Injection', 'IV Drip', 'Nebulization', 'Physiotherapy', 'Other'];
+const MODES_POS = [
+  { key: 'cash', label: 'Cash', color: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
+  { key: 'upi',  label: 'UPI',  color: 'border-violet-400 bg-violet-50 text-violet-700'  },
+  { key: 'card', label: 'Card', color: 'border-cyan-400 bg-cyan-50 text-cyan-700'    },
+];
+
+function printProcedureReceipt(charge) {
+  const hospitalName = localStorage.getItem('hospital_name') || 'Hospital Clinic';
+  const tagline = localStorage.getItem('hospital_tagline') || 'Your Health, Our Priority';
+  const MODE_LABEL = { cash: 'Cash', upi: 'UPI', card: 'Card' };
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>${charge.charge_no}</title>
+<style>
+  body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;color:#222;padding:20px;margin:0}
+  .box{max-width:380px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;padding:22px}
+  .hdr{text-align:center;border-bottom:2px solid #ea580c;padding-bottom:12px;margin-bottom:16px}
+  .hname{font-size:19px;font-weight:900;color:#7c2d12;letter-spacing:.5px}
+  .htag{font-size:11px;color:#6b7280;margin-top:3px}
+  .badge{display:inline-block;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;margin:12px auto;display:block;width:fit-content}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  td{padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+  td:last-child{font-weight:600;text-align:right}
+  .lbl{color:#6b7280}
+  .total-row td{font-size:16px;font-weight:900;border-top:2px solid #ea580c;border-bottom:none;padding-top:11px;color:#c2410c}
+  .footer{text-align:center;font-size:11px;color:#9ca3af;margin-top:20px;border-top:1px solid #f3f4f6;padding-top:12px}
+  .print-btn{display:block;width:100%;margin:18px 0 4px;padding:11px;background:#ea580c;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:8px;cursor:pointer}
+  .print-btn:hover{background:#c2410c}
+  @media print{.print-btn{display:none!important}body{padding:0}.box{border:none;border-radius:0}}
+</style></head><body>
+<div class="box">
+  <div class="hdr">
+    <div class="hname">${hospitalName}</div>
+    ${tagline ? `<div class="htag">${tagline}</div>` : ''}
+    <div class="htag" style="margin-top:6px;font-weight:700;color:#374151">Procedure Charge Receipt</div>
+  </div>
+  <div class="badge">🧾 ${charge.charge_no}</div>
+  <table>
+    <tr><td class="lbl">Patient</td><td>${charge.patient_name}${charge.patient_code ? ` (${charge.patient_code})` : ''}</td></tr>
+    <tr><td class="lbl">Procedure</td><td>${charge.label}</td></tr>
+    <tr><td class="lbl">Payment Mode</td><td>${MODE_LABEL[charge.payment_mode] || charge.payment_mode}</td></tr>
+    ${charge.transaction_ref ? `<tr><td class="lbl">Ref</td><td>${charge.transaction_ref}</td></tr>` : ''}
+    <tr><td class="lbl">Date & Time</td><td>${new Date(charge.created_at).toLocaleString('en-IN')}</td></tr>
+    <tr class="total-row"><td>Amount Collected</td><td>₹${Number(charge.amount).toLocaleString('en-IN')}</td></tr>
+  </table>
+  <div class="footer">Thank you · Please retain this receipt for your records.</div>
+  <button class="print-btn" onclick="window.print()">🖨 Print</button>
+</div>
+</body></html>`;
+  const w = window.open('', '_blank', 'width=440,height=580');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+}
+
+function ProcedureChargePanel() {
+  const empty = { patient_name: '', patient_code: '', label: '', custom_label: '', amount: '', mode: 'cash', txRef: '' };
+  const [form, setForm] = useState(empty);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const collect = async () => {
+    const label = form.label === 'Other' ? form.custom_label.trim() : form.label;
+    if (!form.patient_name.trim()) { setError('Patient name is required.'); return; }
+    if (!label) { setError('Select or enter a procedure name.'); return; }
+    if (!form.amount || Number(form.amount) <= 0) { setError('Enter a valid amount.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await createReceptionCharge({
+        patient_name: form.patient_name.trim(),
+        patient_code: form.patient_code.trim() || undefined,
+        label,
+        amount: Number(form.amount),
+        payment_mode: form.mode,
+        transaction_ref: form.txRef.trim() || undefined,
+      });
+      setDone(data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to collect charge.');
+    }
+    setLoading(false);
+  };
+
+  const reset = () => { setForm(empty); setDone(null); setError(''); };
+
+  if (done) {
+    return (
+      <div className="card border-orange-200 bg-orange-50/40 space-y-4 animate-fade-up">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+          <div>
+            <div className="font-bold text-gray-800 text-sm">Charge Collected</div>
+            <div className="text-xs text-gray-500 font-mono">{done.charge_no}</div>
+          </div>
+          <div className="ml-auto text-right">
+            <div className="text-xl font-black text-orange-600">₹{Number(done.amount).toLocaleString('en-IN')}</div>
+            <div className="text-xs text-gray-400">{done.label}</div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-orange-100 p-3 space-y-1.5 text-sm">
+          <div className="flex justify-between"><span className="text-gray-500">Patient</span><span className="font-medium">{done.patient_name}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Mode</span><span className="font-medium capitalize">{done.payment_mode}</span></div>
+          {done.transaction_ref && <div className="flex justify-between"><span className="text-gray-500">Ref</span><span className="font-medium">{done.transaction_ref}</span></div>}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => printProcedureReceipt(done)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-semibold rounded-xl border border-orange-300 bg-orange-100 text-orange-700 hover:bg-orange-200 transition-all">
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            Print Receipt
+          </button>
+          <button onClick={reset} className="flex-1 py-2.5 text-sm font-semibold rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-all">
+            New Charge
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card border-orange-200 space-y-3 animate-fade-up">
+      {/* Header */}
+      <div className="flex items-center gap-2 pb-1 border-b border-orange-100">
+        <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+        </div>
+        <div>
+          <div className="text-sm font-bold text-gray-800">Collect Procedure Charge</div>
+          <div className="text-[10px] text-gray-400">Blood test, ECG, dressing, injection…</div>
+        </div>
+      </div>
+
+      {/* Patient Name */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">Patient Name <span className="text-red-400">*</span></label>
+        <input
+          className="input text-sm py-2"
+          placeholder="e.g. Ravi Kumar"
+          value={form.patient_name}
+          onChange={e => set('patient_name', e.target.value)}
+        />
+      </div>
+
+      {/* Patient ID (optional) */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">Patient ID <span className="text-gray-400 font-normal">(optional)</span></label>
+        <input
+          className="input text-sm py-2"
+          placeholder="e.g. PAT000123"
+          value={form.patient_code}
+          onChange={e => set('patient_code', e.target.value)}
+        />
+      </div>
+
+      {/* Procedure label */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">Procedure / Reason <span className="text-red-400">*</span></label>
+        <select className="input text-sm py-2" value={form.label} onChange={e => set('label', e.target.value)}>
+          <option value="">— Select —</option>
+          {PROC_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        {form.label === 'Other' && (
+          <input
+            className="input text-sm py-2 mt-1.5 animate-fade-up"
+            placeholder="Enter procedure name"
+            value={form.custom_label}
+            onChange={e => set('custom_label', e.target.value)}
+          />
+        )}
+      </div>
+
+      {/* Amount */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">Amount (₹) <span className="text-red-400">*</span></label>
+        <input
+          className="input text-sm py-2 font-bold"
+          type="number"
+          min="1"
+          placeholder="0"
+          value={form.amount}
+          onChange={e => set('amount', e.target.value)}
+        />
+      </div>
+
+      {/* Payment Mode */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Payment Mode</label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {MODES_POS.map(m => (
+            <button
+              key={m.key}
+              onClick={() => { set('mode', m.key); set('txRef', ''); }}
+              className={`py-2 text-xs font-bold rounded-lg border-2 transition-all ${form.mode === m.key ? m.color : 'border-gray-200 bg-gray-50 text-gray-500'}`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {(form.mode === 'upi' || form.mode === 'card') && (
+          <input
+            className="input text-sm py-2 mt-1.5 animate-fade-up"
+            placeholder={form.mode === 'upi' ? 'UPI Transaction ID (optional)' : 'Card Last 4 Digits (optional)'}
+            value={form.txRef}
+            maxLength={form.mode === 'card' ? 4 : 30}
+            onChange={e => set('txRef', e.target.value)}
+          />
+        )}
+      </div>
+
+      {error && (
+        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
+      )}
+
+      {/* Collect button */}
+      <button
+        onClick={collect}
+        disabled={loading}
+        className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-[0.98] disabled:opacity-50 text-white font-bold text-sm transition-all shadow-md shadow-orange-900/10 flex items-center justify-center gap-2"
+      >
+        {loading ? 'Processing…' : (
+          <>
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+            Collect ₹{form.amount ? Number(form.amount).toLocaleString('en-IN') : '0'}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/* ── Procedure Charge Bill print helper ─────────────────────────────────────── */
+function printProcBill(rx) {
+  const hospitalName = localStorage.getItem('hospital_name') || 'Hospital Clinic';
+  const tagline = localStorage.getItem('hospital_tagline') || '';
+  const MODE_LABEL = { cash: 'Cash', upi: 'UPI', card: 'Card' };
+  const consultAmt = Number(rx.consult_amount || 0);
+  const procAmt = Number(rx.procedure_charge);
+  const total = consultAmt + procAmt;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>${rx.procedure_receipt_no || 'Procedure Bill'}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;color:#222;padding:24px}
+  .box{max-width:400px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;padding:24px}
+  .hdr{text-align:center;border-bottom:2px solid #1d4ed8;padding-bottom:14px;margin-bottom:18px}
+  .hname{font-size:20px;font-weight:900;color:#1e3a8a;letter-spacing:.5px}
+  .htag{font-size:11px;color:#6b7280;margin-top:3px}
+  .doc-row{display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:14px}
+  .patient-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap}
+  .patient-box span{color:#6b7280}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#1d4ed8;color:#fff}
+  thead th{padding:8px 12px;font-size:12px;font-weight:700;text-align:left}
+  thead th:last-child{text-align:right}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  td{padding:9px 12px;font-size:13px}
+  td.amt{text-align:right;font-weight:600}
+  tfoot tr{background:#1d4ed8;color:#fff}
+  tfoot td{padding:10px 12px;font-weight:900;font-size:15px}
+  tfoot td:last-child{text-align:right}
+  .mode-row{display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-top:10px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px}
+  .paid-badge{text-align:center;margin-top:12px;background:#dcfce7;border:1px solid #86efac;color:#166534;font-weight:700;font-size:13px;padding:8px;border-radius:8px}
+  .footer{text-align:center;font-size:11px;color:#9ca3af;margin-top:16px;border-top:1px solid #e5e7eb;padding-top:12px}
+  .print-btn{display:block;width:100%;margin:18px 0 4px;padding:11px;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:8px;cursor:pointer}
+  .print-btn:hover{background:#1e40af}
+  @media print{.print-btn{display:none!important}body{padding:0}.box{border:none;border-radius:0}}
+</style></head><body>
+<div class="box">
+  <div class="hdr">
+    <div class="hname">${hospitalName}</div>
+    ${tagline ? `<div class="htag">${tagline}</div>` : ''}
+    <div class="htag" style="margin-top:6px;font-weight:600;color:#374151">Patient Bill / Receipt</div>
+  </div>
+  <div class="doc-row">
+    <div><strong>${rx.doctor_name}</strong><br/><span style="color:#6b7280;font-size:11px">${rx.specialization || ''}</span></div>
+    <div style="text-align:right;font-size:12px">
+      Date: ${rx.appt_date || ''}<br/>
+      Token: ${rx.token_display || ''}<br/>
+      Time: ${rx.time_slot || ''}
+    </div>
+  </div>
+  <div class="patient-box">
+    <div><span>Patient: </span><strong>${rx.patient_name}</strong></div>
+    <div><span>ID: </span><strong>${rx.patient_code || '—'}</strong></div>
+    ${rx.gender ? `<div><span>Gender: </span><strong>${rx.gender}</strong></div>` : ''}
+    ${rx.age ? `<div><span>Age: </span><strong>${rx.age} yrs</strong></div>` : ''}
+  </div>
+  <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#374151;margin-bottom:8px">BILL DETAILS</div>
+  <table>
+    <thead><tr><th>#</th><th>Description</th><th>Amount</th></tr></thead>
+    <tbody>
+      ${consultAmt > 0 ? `<tr><td>1</td><td>Consultation Fee</td><td class="amt">₹${consultAmt.toLocaleString('en-IN')}</td></tr>` : ''}
+      <tr><td>${consultAmt > 0 ? 2 : 1}</td><td style="color:#c2410c">${rx.procedure_label || 'Procedure Charge'}</td><td class="amt" style="color:#c2410c">₹${procAmt.toLocaleString('en-IN')}</td></tr>
+    </tbody>
+    <tfoot><tr><td colspan="2">TOTAL</td><td>₹${total.toLocaleString('en-IN')}</td></tr></tfoot>
+  </table>
+  <div class="mode-row"><span>Procedure Payment Mode</span><strong>${MODE_LABEL[rx.procedure_payment_mode] || rx.procedure_payment_mode || ''}</strong></div>
+  ${rx.transaction_ref ? `<div class="mode-row" style="margin-top:6px"><span>Ref</span><strong>${rx.transaction_ref}</strong></div>` : ''}
+  <div class="paid-badge">✓ PAYMENT RECEIVED</div>
+  <div class="footer">Receipt: ${rx.procedure_receipt_no || ''} · This is a digitally generated bill.</div>
+  <button class="print-btn" onclick="window.print()">🖨 Print</button>
+</div>
+</body></html>`;
+  const w = window.open('', '_blank', 'width=460,height=680');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+}
+
+/* ── Pay Procedure Modal ───────────────────────────────────────────────────── */
+function PayProcedureModal({ item, onClose, onPaid }) {
+  const [mode, setMode] = useState('cash');
+  const [txRef, setTxRef] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(null);
+
+  const collect = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await payProcedureCharge(item.id, {
+        payment_mode: mode,
+        transaction_ref: txRef.trim() || undefined,
+      });
+      const result = { ...data, procedure_payment_mode: mode, transaction_ref: txRef.trim() || null };
+      setDone(result);
+      onPaid();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Payment failed.');
+    }
+    setLoading(false);
+  };
+
+  const MODES = [
+    { key: 'cash', label: 'Cash', sel: 'border-emerald-400 bg-emerald-50 text-emerald-700', idle: 'border-gray-200 bg-gray-50 text-gray-500' },
+    { key: 'upi',  label: 'UPI',  sel: 'border-violet-400 bg-violet-50 text-violet-700',   idle: 'border-gray-200 bg-gray-50 text-gray-500' },
+    { key: 'card', label: 'Card', sel: 'border-cyan-400 bg-cyan-50 text-cyan-700',          idle: 'border-gray-200 bg-gray-50 text-gray-500' },
+  ];
+
+  const consultAmt = Number(item.consult_amount || 0);
+  const procAmt = Number(item.procedure_charge);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-white font-bold text-base">Procedure Charge Payment</div>
+            <div className="text-orange-100 text-xs mt-0.5">{item.token_display} · {item.patient_name}</div>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1 rounded-lg transition-colors">
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {done ? (
+            /* ── SUCCESS STATE ── */
+            <div className="space-y-4">
+              <div className="text-center py-3">
+                <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
+                  <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                  </svg>
+                </div>
+                <div className="font-bold text-gray-800 text-lg">Payment Complete!</div>
+                <div className="text-sm text-gray-500 mt-1 font-mono">{done.procedure_receipt_no}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl border p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">Patient</span><span className="font-medium">{done.patient_name}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Token</span><span className="font-mono font-bold text-blue-700">{done.token_display}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Procedure</span><span className="font-medium text-orange-700">{done.procedure_label}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Mode</span><span className="font-medium capitalize">{done.procedure_payment_mode}</span></div>
+                <div className="border-t pt-2 flex justify-between font-bold text-base"><span>Amount Paid</span><span className="text-green-600">₹{procAmt.toLocaleString('en-IN')}</span></div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => printProcBill(done)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-all">
+                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                  </svg>
+                  Print Bill
+                </button>
+                <button onClick={onClose} className="flex-1 py-2.5 text-sm font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── PAYMENT FORM ── */
+            <>
+              {/* Bill summary */}
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-2 text-sm">
+                <div className="font-semibold text-gray-700 text-xs uppercase tracking-wider mb-1">Bill Summary</div>
+                {consultAmt > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Consultation Fee</span>
+                    <span className="flex items-center gap-1.5 text-green-700 font-medium">
+                      <span className="text-[10px] bg-green-100 px-1.5 py-0.5 rounded-full font-bold">✓ Paid</span>
+                      ₹{consultAmt.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700 font-medium">{item.procedure_label || 'Procedure Charge'}</span>
+                  <span className="flex items-center gap-1.5 text-orange-700 font-bold">
+                    <span className="text-[10px] bg-orange-100 px-1.5 py-0.5 rounded-full font-bold">⏳ Due</span>
+                    ₹{procAmt.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="border-t border-orange-200 pt-2 flex justify-between font-black text-base">
+                  <span>Amount Due</span>
+                  <span className="text-orange-600">₹{procAmt.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Doctor + patient info */}
+              <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">
+                  {item.patient_name?.[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-gray-800 text-sm truncate">{item.patient_name}</div>
+                  <div className="text-xs text-gray-500">{item.patient_code} · {item.doctor_name}</div>
+                </div>
+                <span className="font-mono font-bold text-blue-700 text-sm flex-shrink-0">{item.token_display}</span>
+              </div>
+
+              {/* Payment mode */}
+              <div>
+                <div className="text-xs font-bold text-gray-600 mb-1.5">Payment Mode</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {MODES.map(m => (
+                    <button key={m.key} onClick={() => { setMode(m.key); setTxRef(''); }}
+                      className={`py-2.5 text-sm font-bold rounded-xl border-2 transition-all ${mode === m.key ? m.sel : m.idle}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {(mode === 'upi' || mode === 'card') && (
+                  <input className="input text-sm py-2 mt-2 animate-fade-up"
+                    placeholder={mode === 'upi' ? 'UPI Transaction ID (optional)' : 'Card Last 4 Digits (optional)'}
+                    value={txRef} maxLength={mode === 'card' ? 4 : 30}
+                    onChange={e => setTxRef(e.target.value)} />
+                )}
+              </div>
+
+              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+
+              <button onClick={collect} disabled={loading}
+                className="w-full py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-[0.98] disabled:opacity-50 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2">
+                {loading ? 'Processing…' : (
+                  <>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Collect Procedure Charge · ₹{procAmt.toLocaleString('en-IN')}
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Pending Procedure Charges Panel ──────────────────────────────────────── */
+function PendingProcedurePanel() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await getPendingProcedureCharges();
+      setItems(data);
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const total = items.reduce((s, i) => s + Number(i.procedure_charge), 0);
+
+  return (
+    <>
+      <div className="rounded-2xl border border-orange-200 shadow-md overflow-hidden animate-fade-up bg-white">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center text-xs font-black text-white">
+              {items.length}
+            </span>
+            <span className="text-white font-bold text-sm">Procedure Charges Pending</span>
+          </div>
+          <button onClick={load} className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 flex items-center justify-center transition-colors" title="Refresh">
+            <svg width="13" height="13" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable rows */}
+        <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-gray-400 text-sm">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+              Loading...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <svg width="20" height="20" fill="none" stroke="#16a34a" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+              <div className="text-sm font-semibold text-green-700">All Cleared</div>
+              <div className="text-xs text-gray-400">No pending procedure charges</div>
+            </div>
+          ) : (
+            items.map(item => (
+              <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-orange-50/60 transition-colors">
+                {/* Token */}
+                <span className="flex-shrink-0 font-mono font-black text-blue-700 text-xs bg-blue-50 border border-blue-100 rounded-lg px-2 py-1 min-w-[48px] text-center">
+                  {item.token_display}
+                </span>
+                {/* Name · procedure */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800 truncate">{item.patient_name}</div>
+                  <div className="text-xs text-orange-500 font-medium truncate">{item.procedure_label} <span className="text-gray-400">· {item.doctor_name}</span></div>
+                </div>
+                {/* Amount */}
+                <span className="flex-shrink-0 font-black text-orange-600 text-sm">
+                  ₹{Number(item.procedure_charge).toLocaleString('en-IN')}
+                </span>
+                {/* Collect */}
+                <button
+                  onClick={() => setSelected(item)}
+                  className="flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white transition-all"
+                >
+                  Collect
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer total */}
+        <div className="px-4 py-2.5 bg-orange-50 border-t border-orange-100 flex items-center justify-between">
+          <span className="text-xs text-orange-700 font-medium">Total Due</span>
+          <span className="font-black text-orange-600 text-sm">
+            {items.length > 0 ? `₹${total.toLocaleString('en-IN')}` : '—'}
+          </span>
+        </div>
+      </div>
+
+      {selected && (
+        <PayProcedureModal
+          item={selected}
+          onClose={() => setSelected(null)}
+          onPaid={() => { load(); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -680,6 +1376,11 @@ export default function ReceptionPage() {
     setStep(STEPS.RECEIPT);
   };
 
+  const onSkipPayment = () => {
+    setReceipt(null);
+    setStep(STEPS.RECEIPT);
+  };
+
   const reset = () => {
     setStep(STEPS.SEARCH);
     setQuery('');
@@ -700,8 +1401,12 @@ export default function ReceptionPage() {
         )}
       </div>
 
+      <StepBar step={step} />
+
       {step === STEPS.SEARCH && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          {/* Left: search + results/info */}
+          <div className="lg:col-span-2 space-y-4">
           <div className="card animate-fade-up delay-75">
             <form onSubmit={search} className="flex flex-col xs:flex-row gap-2">
               <select
@@ -803,6 +1508,14 @@ export default function ReceptionPage() {
               </button>
             </div>
           )}
+          </div>
+
+          {/* Right column: pending procedure charges (if enabled in Admin Settings) */}
+          {localStorage.getItem('reception_proc_panel_enabled') !== 'false' && (
+            <div className="lg:col-span-1">
+              <PendingProcedurePanel />
+            </div>
+          )}
         </div>
       )}
 
@@ -823,6 +1536,7 @@ export default function ReceptionPage() {
           patient={selectedPatient}
           doctor={selectedDoctor}
           onPaid={onPaid}
+          onSkipPayment={onSkipPayment}
         />
       )}
 

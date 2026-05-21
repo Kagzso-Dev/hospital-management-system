@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { getTokenDisplay, getDoctors } from '../../api';
@@ -21,6 +21,10 @@ const css = `
     0%,100% { box-shadow:0 0 0 0 rgba(99,102,241,0.0),0 4px 24px rgba(0,0,0,0.4); }
     50%     { box-shadow:0 0 0 6px rgba(99,102,241,0.10),0 4px 36px rgba(99,102,241,0.18); }
   }
+  @keyframes servePulseLight {
+    0%,100% { box-shadow:0 0 0 0 rgba(99,102,241,0.0),0 4px 24px rgba(0,0,0,0.08); }
+    50%     { box-shadow:0 0 0 6px rgba(99,102,241,0.08),0 4px 36px rgba(99,102,241,0.12); }
+  }
   @keyframes rowIn {
     from { opacity:0; transform:translateX(-10px); }
     to   { opacity:1; transform:translateX(0); }
@@ -29,12 +33,17 @@ const css = `
     0%,100% { transform:scale(1); opacity:0.6; }
     50%     { transform:scale(1.6); opacity:0; }
   }
+  @keyframes themeSpin {
+    from { transform:rotate(0deg); }
+    to   { transform:rotate(360deg); }
+  }
 
   .fade-up     { animation: fadeUp     0.5s ease-out both; }
   .token-pop   { animation: pop        0.35s ease-out; }
   .serve-pulse { animation: servePulse 2.8s  ease-in-out infinite; }
   .row-in      { animation: rowIn      0.38s ease-out both; }
 
+  /* ── Root ── */
   .td-root {
     min-height: 100dvh;
     display: flex;
@@ -43,6 +52,10 @@ const css = `
     background: linear-gradient(150deg,#0d1117 0%,#0f172a 45%,#191040 75%,#0d1117 100%);
     user-select: none;
     overflow-x: hidden;
+    transition: background 0.35s ease;
+  }
+  .td-root.light {
+    background: linear-gradient(150deg,#eef2ff 0%,#f8faff 45%,#f0f0ff 75%,#eef2ff 100%);
   }
 
   /* ── Header ── */
@@ -60,29 +73,60 @@ const css = `
     background:linear-gradient(135deg,#6366f1,#8b5cf6);
     box-shadow:0 3px 14px rgba(99,102,241,0.45);
   }
-  .td-brand-name { font-weight:800; color:#fff; font-size:clamp(0.8rem,2.2vw,1rem); line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .td-brand-tag  { color:#818cf8; font-size:0.68rem; font-weight:500; white-space:nowrap; }
+  .td-brand-name { font-weight:800; color:#fff; font-size:clamp(0.8rem,2.2vw,1rem); line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 0.3s; }
+  .td-brand-tag  { color:#818cf8; font-size:0.68rem; font-weight:500; white-space:nowrap; transition:color 0.3s; }
+
+  .td-root.light .td-brand-name { color:#1e1b4b; }
+  .td-root.light .td-brand-tag  { color:#6366f1; }
 
   .td-doctor-center {
     flex:1; display:flex; flex-direction:column; align-items:center;
     min-width:0;
   }
-  .td-doctor-name { font-weight:700; color:rgba(255,255,255,0.88); font-size:clamp(0.78rem,2vw,0.95rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
-  .td-doctor-spec { color:rgba(255,255,255,0.38); font-size:0.68rem; white-space:nowrap; }
+  .td-doctor-name { font-weight:700; color:rgba(255,255,255,0.88); font-size:clamp(0.78rem,2vw,0.95rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; transition:color 0.3s; }
+  .td-doctor-spec { color:rgba(255,255,255,0.38); font-size:0.68rem; white-space:nowrap; transition:color 0.3s; }
+
+  .td-root.light .td-doctor-name { color:#1e1b4b; }
+  .td-root.light .td-doctor-spec { color:#6b7280; }
 
   .td-clock { text-align:right; flex-shrink:0; }
   .td-time  {
     font-family:'JetBrains Mono','Courier New',monospace;
     font-weight:800; color:#fff; line-height:1;
-    font-size:clamp(1rem,2.8vw,1.5rem); letter-spacing:0.02em;
+    font-size:clamp(1rem,2.8vw,1.5rem); letter-spacing:0.02em; transition:color 0.3s;
   }
-  .td-ampm  { color:#818cf8; font-size:0.7rem; font-weight:700; margin-left:4px; }
-  .td-date  { color:rgba(255,255,255,0.3); font-size:0.65rem; margin-top:2px; }
+  .td-ampm  { color:#818cf8; font-size:0.7rem; font-weight:700; margin-left:4px; transition:color 0.3s; }
+  .td-date  { color:rgba(255,255,255,0.3); font-size:0.65rem; margin-top:2px; transition:color 0.3s; }
   .td-live  { display:flex; align-items:center; justify-content:flex-end; gap:5px; margin-top:3px; }
   .td-live-dot-wrap { position:relative; width:8px; height:8px; }
   .td-live-dot-ping { position:absolute; inset:0; border-radius:50%; background:#4ade80; animation:pingDot 1.6s ease-in-out infinite; }
   .td-live-dot      { position:relative; width:8px; height:8px; border-radius:50%; background:#4ade80; }
   .td-live-text { color:#4ade80; font-size:0.62rem; font-weight:800; letter-spacing:0.15em; }
+
+  .td-root.light .td-time  { color:#1e1b4b; }
+  .td-root.light .td-ampm  { color:#6366f1; }
+  .td-root.light .td-date  { color:#6b7280; }
+
+  /* ── Theme toggle button ── */
+  .td-theme-btn {
+    width:34px; height:34px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    border:1px solid rgba(255,255,255,0.14);
+    background:rgba(255,255,255,0.08);
+    transition:background 0.2s, border-color 0.2s, transform 0.15s;
+    margin-right:10px;
+  }
+  .td-theme-btn:hover  { background:rgba(255,255,255,0.16); transform:scale(1.08); }
+  .td-theme-btn:active { transform:scale(0.92); }
+  .td-theme-btn svg    { transition:transform 0.4s cubic-bezier(.34,1.56,.64,1); }
+  .td-theme-btn:hover svg { transform:rotate(20deg); }
+
+  .td-root.light .td-theme-btn {
+    border-color:rgba(99,102,241,0.22);
+    background:rgba(99,102,241,0.08);
+  }
+  .td-root.light .td-theme-btn:hover { background:rgba(99,102,241,0.16); }
 
   /* ── Glass card base ── */
   .dglass {
@@ -92,6 +136,12 @@ const css = `
     -webkit-backdrop-filter:blur(18px);
     border:1px solid rgba(255,255,255,0.09);
     box-shadow:0 4px 24px rgba(0,0,0,0.3);
+    transition:background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  }
+  .td-root.light .dglass {
+    background:rgba(255,255,255,0.88);
+    border:1px solid rgba(99,102,241,0.13);
+    box-shadow:0 4px 20px rgba(99,102,241,0.08);
   }
 
   /* ── Stat cards grid ── */
@@ -126,39 +176,32 @@ const css = `
     background:rgba(99,102,241,0.10) !important;
     border:1px solid rgba(99,102,241,0.28) !important;
   }
+  .td-root.light .stat-card-serve {
+    background:rgba(99,102,241,0.07) !important;
+    border:1px solid rgba(99,102,241,0.18) !important;
+    animation-name:servePulseLight !important;
+  }
   .serve-token {
     font-family:'JetBrains Mono','Courier New',monospace;
     font-weight:800; color:#fff; line-height:1; white-space:nowrap;
     font-size:clamp(1.6rem,6vw,3rem);
     letter-spacing:0.02em;
     text-shadow:0 0 40px rgba(99,102,241,0.55);
+    transition:color 0.3s, text-shadow 0.3s;
   }
+  .td-root.light .serve-token { color:#1e1b4b; text-shadow:0 0 30px rgba(99,102,241,0.18); }
   .serve-name {
     color:rgba(255,255,255,0.65); font-weight:600; font-size:0.8rem;
     text-align:center; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    transition:color 0.3s;
   }
+  .td-root.light .serve-name { color:#4b5563; }
   .serve-status {
     display:flex; align-items:center; gap:5px;
     color:#a5b4fc; font-size:0.62rem; font-weight:800; letter-spacing:0.15em; text-transform:uppercase;
+    transition:color 0.3s;
   }
-
-  /* ── Progress strip ── */
-  .td-progress {
-    display:flex; align-items:center; gap:10px;
-    margin:0 12px;
-    padding:8px 14px;
-  }
-  .td-progress-label { color:rgba(255,255,255,0.35); font-size:0.65rem; font-weight:600; white-space:nowrap; }
-  .td-progress-bar-bg {
-    flex:1; border-radius:99px; height:5px; overflow:hidden;
-    background:rgba(255,255,255,0.07);
-  }
-  .td-progress-bar-fill {
-    height:100%; border-radius:99px;
-    background:linear-gradient(90deg,#6366f1,#10b981);
-    transition:width 0.8s ease;
-  }
-  .td-progress-pct { color:rgba(255,255,255,0.4); font-size:0.65rem; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .td-root.light .serve-status { color:#6366f1; }
 
   /* ── Next in Queue ── */
   .td-queue {
@@ -168,67 +211,89 @@ const css = `
     display:flex; align-items:center; justify-content:space-between;
     padding:10px 14px;
     border-bottom:1px solid rgba(255,255,255,0.06);
+    transition:border-color 0.3s;
   }
+  .td-root.light .td-queue-header { border-bottom-color:rgba(0,0,0,0.08); }
   .td-queue-title {
     display:flex; align-items:center; gap:8px;
     color:rgba(255,255,255,0.6); font-size:0.72rem; font-weight:800; letter-spacing:0.18em; text-transform:uppercase;
+    transition:color 0.3s;
   }
+  .td-root.light .td-queue-title { color:#4b5563; }
   .td-queue-icon {
     width:26px; height:26px; border-radius:8px;
     display:flex; align-items:center; justify-content:center;
     background:rgba(99,102,241,0.18);
+    transition:background 0.3s;
   }
+  .td-root.light .td-queue-icon { background:rgba(99,102,241,0.12); }
   .td-queue-badge {
     font-size:0.65rem; font-weight:700; padding:3px 10px; border-radius:99px;
     background:rgba(99,102,241,0.18); color:#a5b4fc; border:1px solid rgba(99,102,241,0.25);
+    transition:background 0.3s, color 0.3s, border-color 0.3s;
   }
+  .td-root.light .td-queue-badge { background:rgba(99,102,241,0.1); color:#4338ca; border-color:rgba(99,102,241,0.22); }
 
   /* Queue rows */
   .td-queue-row {
     display:flex; align-items:center; gap:10px;
     padding:10px 14px;
     border-bottom:1px solid rgba(255,255,255,0.04);
-    transition:background 0.2s;
+    transition:background 0.2s, border-color 0.3s;
   }
   .td-queue-row:last-child { border-bottom:none; }
   .td-queue-row-first { background:rgba(99,102,241,0.07); }
+  .td-root.light .td-queue-row { border-bottom-color:rgba(0,0,0,0.05); }
+  .td-root.light .td-queue-row-first { background:rgba(99,102,241,0.05); }
 
   .td-rank {
     width:30px; height:30px; border-radius:10px; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
     font-weight:800; font-size:0.75rem;
+    transition:background 0.3s, color 0.3s;
   }
   .td-rank-1 { background:rgba(99,102,241,0.22); color:#a5b4fc; }
   .td-rank-n { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.25); }
+  .td-root.light .td-rank-1 { background:rgba(99,102,241,0.14); color:#4338ca; }
+  .td-root.light .td-rank-n { background:rgba(0,0,0,0.05); color:#9ca3af; }
 
   .td-row-token {
     font-family:'JetBrains Mono','Courier New',monospace;
     font-weight:800; white-space:nowrap; flex-shrink:0;
     font-size:clamp(1rem,2.5vw,1.4rem); letter-spacing:0.02em;
     width:clamp(80px,14vw,130px);
+    transition:color 0.3s, text-shadow 0.3s;
   }
   .td-row-token-1 { color:#fff; text-shadow:0 0 20px rgba(99,102,241,0.4); }
   .td-row-token-n { color:rgba(255,255,255,0.22); }
+  .td-root.light .td-row-token-1 { color:#1e1b4b; text-shadow:none; }
+  .td-root.light .td-row-token-n { color:#d1d5db; }
 
   .td-row-info { flex:1; min-width:0; }
   .td-row-name {
     font-weight:600; font-size:clamp(0.75rem,1.8vw,0.9rem);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    transition:color 0.3s;
   }
   .td-row-name-1 { color:rgba(255,255,255,0.82); }
   .td-row-name-n { color:rgba(255,255,255,0.28); }
-  .td-row-time { color:rgba(255,255,255,0.25); font-size:0.65rem; font-weight:500; margin-top:1px; }
+  .td-row-time { color:rgba(255,255,255,0.25); font-size:0.65rem; font-weight:500; margin-top:1px; transition:color 0.3s; }
+  .td-root.light .td-row-name-1 { color:#111827; }
+  .td-root.light .td-row-name-n { color:#d1d5db; }
+  .td-root.light .td-row-time   { color:#9ca3af; }
 
   .td-badge-next {
     flex-shrink:0; font-size:0.62rem; font-weight:800; padding:4px 10px; border-radius:99px;
     background:rgba(99,102,241,0.22); color:#a5b4fc; border:1px solid rgba(99,102,241,0.35);
-    white-space:nowrap;
+    white-space:nowrap; transition:background 0.3s, color 0.3s, border-color 0.3s;
   }
   .td-badge-q {
     flex-shrink:0; font-size:0.62rem; font-weight:600; padding:4px 10px; border-radius:99px;
     background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.22);
-    white-space:nowrap;
+    white-space:nowrap; transition:background 0.3s, color 0.3s;
   }
+  .td-root.light .td-badge-next { background:rgba(99,102,241,0.14); color:#4338ca; border-color:rgba(99,102,241,0.28); }
+  .td-root.light .td-badge-q   { background:rgba(0,0,0,0.04); color:#9ca3af; }
 
   /* ── Empty state ── */
   .td-empty {
@@ -239,15 +304,20 @@ const css = `
     width:44px; height:44px; border-radius:14px;
     display:flex; align-items:center; justify-content:center;
     background:rgba(255,255,255,0.04);
+    transition:background 0.3s;
   }
-  .td-empty-text { color:rgba(255,255,255,0.2); font-size:0.78rem; font-weight:500; }
+  .td-empty-text { color:rgba(255,255,255,0.2); font-size:0.78rem; font-weight:500; transition:color 0.3s; }
+  .td-root.light .td-empty-icon { background:rgba(0,0,0,0.05); }
+  .td-root.light .td-empty-text { color:#9ca3af; }
 
   /* ── Footer ── */
   .td-footer {
     text-align:center; padding:8px 12px;
     color:rgba(255,255,255,0.18); font-size:0.62rem;
     border-top:1px solid rgba(255,255,255,0.05);
+    transition:color 0.3s, border-color 0.3s;
   }
+  .td-root.light .td-footer { color:#9ca3af; border-top-color:rgba(0,0,0,0.08); }
 
   /* ── Mobile tweaks ── */
   @media (max-width: 480px) {
@@ -273,6 +343,7 @@ const css = `
     .td-row-token { width:68px; font-size:0.88rem; }
     .td-row-name { font-size:0.72rem; }
     .td-badge-next, .td-badge-q { padding:3px 7px; font-size:0.58rem; }
+    .td-theme-btn { width:28px; height:28px; border-radius:8px; margin-right:6px; }
   }
 
   @media (max-width:360px) {
@@ -304,6 +375,26 @@ const DGlass = ({ children, className = '', style = {} }) => (
   <div className={`dglass ${className}`} style={style}>{children}</div>
 );
 
+const SunIcon = () => (
+  <svg width="16" height="16" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg width="15" height="15" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+  </svg>
+);
+
 export default function TokenDisplay() {
   const { doctorId } = useParams();
 
@@ -313,6 +404,17 @@ export default function TokenDisplay() {
   const [counts,  setCounts ] = useState({ waiting:0, completed:0, in_progress:0, total:0 });
   const [time,    setTime   ] = useState(new Date());
   const [popKey,  setPopKey ] = useState(0);
+  const [theme,   setTheme  ] = useState(() => localStorage.getItem('td_theme') || 'dark');
+
+  const isLight = theme === 'light';
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('td_theme', next);
+      return next;
+    });
+  };
 
   const hospitalName = localStorage.getItem('hospital_name')    || 'Hospital Management';
   const tagline      = localStorage.getItem('hospital_tagline') || 'Quality Healthcare';
@@ -335,7 +437,7 @@ export default function TokenDisplay() {
 
   useEffect(() => {
     refresh();
-    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantInfo = JSON.parse(sessionStorage.getItem('tenant_info') || '{}');
     const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
     socket.on(`token_update_${tenantId}`, ({ doctor_id }) => {
@@ -352,20 +454,17 @@ export default function TokenDisplay() {
   const timeStr = `${pad(h % 12 || 12)}:${pad(time.getMinutes())}:${pad(time.getSeconds())}`;
   const dateStr = time.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
 
-  const total = counts.total || 0;
-  const pct   = total > 0 ? Math.round(((counts.completed || 0) / total) * 100) : 0;
-
   return (
     <>
       <style>{css}</style>
 
-      <div className="td-root">
+      <div className={`td-root${isLight ? ' light' : ''}`}>
 
         {/* Ambient glows */}
         <div style={{ pointerEvents:'none', position:'fixed', inset:0, overflow:'hidden', zIndex:0 }}>
-          <div style={{ position:'absolute', width:'50vw', height:'50vw', maxWidth:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(99,102,241,0.10) 0%,transparent 65%)', top:'-15%', left:'-10%' }} />
-          <div style={{ position:'absolute', width:'40vw', height:'40vw', maxWidth:420, borderRadius:'50%', background:'radial-gradient(circle,rgba(16,185,129,0.07) 0%,transparent 65%)', bottom:'-10%', right:'-5%' }} />
-          <div style={{ position:'absolute', width:'30vw', height:'30vw', maxWidth:320, borderRadius:'50%', background:'radial-gradient(circle,rgba(245,158,11,0.06) 0%,transparent 65%)', top:'35%', right:'20%' }} />
+          <div style={{ position:'absolute', width:'50vw', height:'50vw', maxWidth:500, borderRadius:'50%', background: isLight ? 'radial-gradient(circle,rgba(99,102,241,0.07) 0%,transparent 65%)' : 'radial-gradient(circle,rgba(99,102,241,0.10) 0%,transparent 65%)', top:'-15%', left:'-10%', transition:'background 0.4s' }} />
+          <div style={{ position:'absolute', width:'40vw', height:'40vw', maxWidth:420, borderRadius:'50%', background: isLight ? 'radial-gradient(circle,rgba(16,185,129,0.05) 0%,transparent 65%)' : 'radial-gradient(circle,rgba(16,185,129,0.07) 0%,transparent 65%)', bottom:'-10%', right:'-5%', transition:'background 0.4s' }} />
+          <div style={{ position:'absolute', width:'30vw', height:'30vw', maxWidth:320, borderRadius:'50%', background: isLight ? 'radial-gradient(circle,rgba(245,158,11,0.04) 0%,transparent 65%)' : 'radial-gradient(circle,rgba(245,158,11,0.06) 0%,transparent 65%)', top:'35%', right:'20%', transition:'background 0.4s' }} />
         </div>
 
         {/* ── Header ── */}
@@ -387,6 +486,15 @@ export default function TokenDisplay() {
               <div className="td-doctor-name">{doctor?.name || '—'}</div>
               <div className="td-doctor-spec">{doctor?.specialization}</div>
             </div>
+
+            <button
+              className="td-theme-btn"
+              onClick={toggleTheme}
+              title={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
+              aria-label="Toggle theme"
+            >
+              {isLight ? <SunIcon /> : <MoonIcon />}
+            </button>
 
             <div className="td-clock">
               <div className="td-time">
@@ -410,8 +518,8 @@ export default function TokenDisplay() {
 
           {/* Mobile doctor name */}
           <div style={{ display:'none' }} className="mobile-doc-name">
-            <div style={{ textAlign:'center', color:'rgba(255,255,255,0.8)', fontWeight:700, fontSize:'0.82rem' }}>{doctor?.name}</div>
-            <div style={{ textAlign:'center', color:'rgba(255,255,255,0.35)', fontSize:'0.65rem' }}>{doctor?.specialization}</div>
+            <div style={{ textAlign:'center', color: isLight ? '#1e1b4b' : 'rgba(255,255,255,0.8)', fontWeight:700, fontSize:'0.82rem' }}>{doctor?.name}</div>
+            <div style={{ textAlign:'center', color: isLight ? '#6b7280' : 'rgba(255,255,255,0.35)', fontSize:'0.65rem' }}>{doctor?.specialization}</div>
           </div>
 
           {/* ── Stat cards ── */}
@@ -450,8 +558,8 @@ export default function TokenDisplay() {
                 </>
               ) : (
                 <>
-                  <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:800, color:'rgba(255,255,255,0.12)', fontSize:'clamp(1.4rem,5vw,2.5rem)' }}>—</span>
-                  <span style={{ color:'rgba(255,255,255,0.25)', fontSize:'0.72rem' }}>No active patient</span>
+                  <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:800, color: isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)', fontSize:'clamp(1.4rem,5vw,2.5rem)' }}>—</span>
+                  <span style={{ color: isLight ? '#9ca3af' : 'rgba(255,255,255,0.25)', fontSize:'0.72rem' }}>No active patient</span>
                 </>
               )}
 
@@ -475,9 +583,6 @@ export default function TokenDisplay() {
               <div className="stat-divider" style={{ background:'#10b981' }} />
             </DGlass>
           </div>
-
-          {/* ── Progress strip ── */}
-          {/* Hidden per user request */}
 
           {/* ── Next in Queue ── */}
           <DGlass className="td-queue fade-up" style={{ animationDelay:'230ms' }}>
@@ -524,7 +629,7 @@ export default function TokenDisplay() {
             ) : (
               <div className="td-empty">
                 <div className="td-empty-icon">
-                  <svg width="22" height="22" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <svg width="22" height="22" fill="none" stroke={isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)'} strokeWidth="1.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                   </svg>
                 </div>

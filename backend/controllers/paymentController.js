@@ -32,7 +32,20 @@ const createPayment = async (req, res) => {
       "SELECT id FROM payments WHERE appointment_id = ? AND payment_status = 'paid' AND tenant_id = ?",
       [appointment_id, tenantId]
     );
-    if (existing) return res.status(409).json({ error: 'Payment already recorded for this appointment' });
+    if (existing) {
+      const [[payment]] = await db.query('SELECT * FROM payments WHERE id = ?', [existing.id]);
+      return res.json({
+        ...payment,
+        receipt_no: receiptNo(payment.id),
+        patient_name: apt.patient_name,
+        patient_code: apt.patient_code,
+        doctor_name: apt.doctor_name,
+        specialization: apt.specialization,
+        token_display: apt.token_display,
+        date: apt.date,
+        time_slot: apt.time_slot,
+      });
+    }
 
     const [result] = await db.execute(
       "INSERT INTO payments (tenant_id, appointment_id, patient_id, amount, payment_mode, payment_status, transaction_ref) VALUES (?, ?, ?, ?, ?, 'paid', ?)",

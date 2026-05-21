@@ -1,7 +1,7 @@
 import React from 'react';
 
 const PrintPrescription = React.forwardRef(({ prescription }, ref) => {
-  const { doctor, patient, appointment, diagnosis, notes, items } = prescription;
+  const { doctor, patient, appointment, diagnosis, notes, items, procedure_charge, procedure_label } = prescription;
 
   const timing = (item) =>
     [item.morning && 'Morning', item.afternoon && 'Afternoon', item.night && 'Night']
@@ -64,6 +64,18 @@ const PrintPrescription = React.forwardRef(({ prescription }, ref) => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {Number(procedure_charge) > 0 && (
+        <div className="mb-4 flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg px-4 py-2.5">
+          <div>
+            <div className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-0.5">Procedure Charge</div>
+            <div className="text-sm text-gray-700">{procedure_label || 'Additional Procedure'}</div>
+          </div>
+          <div className="text-lg font-black text-orange-700">
+            ₹{Number(procedure_charge).toLocaleString('en-IN')}
+          </div>
         </div>
       )}
 

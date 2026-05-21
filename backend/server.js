@@ -28,6 +28,7 @@ async function start() {
   app.use('/api/medicines', require('./routes/medicines'));
   app.use('/api/admin', require('./routes/admin'));
   app.use('/api/payments', require('./routes/payments'));
+  app.use('/api/reception-charges', require('./routes/receptionCharges'));
   app.use('/api/ocr', require('./routes/ocr'));
 
   app.use(express.static(path.join(__dirname, '../frontend/dist')));

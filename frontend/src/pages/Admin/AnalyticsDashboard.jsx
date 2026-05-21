@@ -8,7 +8,7 @@ import {
 
 const api = axios.create({ baseURL: '/api/admin' });
 api.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('tenant_token');
+  const token = sessionStorage.getItem('tenant_token');
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   return cfg;
 });
@@ -16,8 +16,8 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('tenant_token');
-      localStorage.removeItem('tenant_info');
+      sessionStorage.removeItem('tenant_token');
+      sessionStorage.removeItem('tenant_info');
       window.location.href = '/login';
     }
     return Promise.reject(err);
@@ -282,12 +282,12 @@ export default function AnalyticsDashboard() {
 
         {/* Area / Line chart - daily trend */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2 mb-4">
             <div>
               <h3 className="font-bold text-gray-800 text-sm">Daily Appointment Trend</h3>
               <p className="text-xs text-gray-400 mt-0.5">{trendData.length} day{trendData.length !== 1 ? 's' : ''} in range</p>
             </div>
-            <div className="flex gap-3 text-xs text-gray-500">
+            <div className="flex gap-3 text-xs text-gray-500 flex-wrap">
               {[['Total','#6366f1'],['Completed','#10b981'],['Cancelled','#ef4444']].map(([l,c]) => (
                 <span key={l} className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c }} />{l}
@@ -410,12 +410,12 @@ export default function AnalyticsDashboard() {
 
       {/* ── Row 3: Doctor performance chart ──────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div>
             <h3 className="font-bold text-gray-800 text-sm">Doctor Performance</h3>
             <p className="text-xs text-gray-400 mt-0.5">Appointments per doctor in selected range</p>
           </div>
-          <div className="flex gap-3 text-xs text-gray-500">
+          <div className="flex gap-3 text-xs text-gray-500 flex-wrap">
             {[['Completed','#10b981'],['Pending','#f59e0b'],['Cancelled','#ef4444']].map(([l,c]) => (
               <span key={l} className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c }} />{l}

@@ -245,7 +245,7 @@ export default function DoctorDashboard() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantInfo = JSON.parse(sessionStorage.getItem('tenant_info') || '{}');
     const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
     socket.on(`token_update_${tenantId}`, (data) => {

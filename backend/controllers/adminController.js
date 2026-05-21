@@ -47,8 +47,9 @@ const getDateAvailability = async (req, res) => {
 
 const setDateAvailability = async (req, res) => {
   try {
-    const { doctor_id, date, is_available, start_time, end_time, slot_duration } = req.body;
+    const { doctor_id, date, is_available, start_time, end_time, slot_duration, substitute_doctor_id } = req.body;
     const tenantId = req.tenantId;
+    const subId = substitute_doctor_id ? Number(substitute_doctor_id) : null;
 
     const [[existing]] = await db.query(
       'SELECT id FROM doctor_availability WHERE doctor_id = ? AND date = ? AND tenant_id = ?',
@@ -57,13 +58,13 @@ const setDateAvailability = async (req, res) => {
 
     if (existing) {
       await db.execute(
-        'UPDATE doctor_availability SET is_available=?, start_time=?, end_time=?, slot_duration=? WHERE doctor_id=? AND date=? AND tenant_id=?',
-        [is_available ? 1 : 0, start_time, end_time, slot_duration || 15, doctor_id, date, tenantId]
+        'UPDATE doctor_availability SET is_available=?, start_time=?, end_time=?, slot_duration=?, substitute_doctor_id=? WHERE doctor_id=? AND date=? AND tenant_id=?',
+        [is_available ? 1 : 0, start_time, end_time, slot_duration || 15, subId, doctor_id, date, tenantId]
       );
     } else {
       await db.execute(
-        'INSERT INTO doctor_availability (tenant_id, doctor_id, date, day_of_week, start_time, end_time, slot_duration, is_available) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)',
-        [tenantId, doctor_id, date, start_time, end_time, slot_duration || 15, is_available ? 1 : 0]
+        'INSERT INTO doctor_availability (tenant_id, doctor_id, date, day_of_week, start_time, end_time, slot_duration, is_available, substitute_doctor_id) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)',
+        [tenantId, doctor_id, date, start_time, end_time, slot_duration || 15, is_available ? 1 : 0, subId]
       );
     }
 
@@ -248,4 +249,88 @@ const resetDoctorPassword = async (req, res) => {
   }
 };
 
-module.exports = { getDoctors, deleteDoctor, resetDoctorPassword, getAnalytics, getDateAvailability, setDateAvailability, setWeeklySchedule, getDateAppointments, reassignAppointments };
+const getRegistrations = async (req, res) => {
+  try {
+    const { date, from, to, search } = req.query;
+    const tenantId = req.tenantId;
+
+    let conditions = ['p.tenant_id = ?'];
+    let params = [tenantId];
+
+    if (date) {
+      conditions.push('DATE(p.created_at) = ?');
+      params.push(date);
+    } else if (from && to) {
+      conditions.push('DATE(p.created_at) BETWEEN ? AND ?');
+      params.push(from, to);
+    }
+
+    if (search) {
+      conditions.push('(p.name LIKE ? OR p.phone LIKE ? OR p.patient_id LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const [patients] = await db.query(
+      `SELECT p.*, COUNT(a.id) AS visit_count
+       FROM patients p
+       LEFT JOIN appointments a ON a.patient_id = p.id AND a.tenant_id = p.tenant_id
+       WHERE ${where}
+       GROUP BY p.id
+       ORDER BY p.created_at DESC
+       LIMIT 500`,
+      params
+    );
+
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+
+    const [[todayStat]] = await db.query(
+      'SELECT COUNT(*) AS count FROM patients WHERE tenant_id = ? AND DATE(created_at) = ?',
+      [tenantId, today]
+    );
+    const [[weekStat]] = await db.query(
+      'SELECT COUNT(*) AS count FROM patients WHERE tenant_id = ? AND DATE(created_at) BETWEEN ? AND ?',
+      [tenantId, weekAgo, today]
+    );
+    const [[totalStat]] = await db.query(
+      'SELECT COUNT(*) AS count FROM patients WHERE tenant_id = ?',
+      [tenantId]
+    );
+
+    res.json({
+      patients,
+      stats: { today: todayStat.count, week: weekStat.count, total: totalStat.count },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getSettings = async (req, res) => {
+  try {
+    const [[row]] = await db.query(
+      'SELECT hospital_name, hospital_tagline, procedure_charge_enabled FROM tenants WHERE id = ?',
+      [req.tenantId]
+    );
+    res.json(row || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const updateSettings = async (req, res) => {
+  try {
+    const { hospital_name, hospital_tagline, procedure_charge_enabled } = req.body;
+    await db.execute(
+      'UPDATE tenants SET hospital_name = ?, hospital_tagline = ?, procedure_charge_enabled = ? WHERE id = ?',
+      [hospital_name || null, hospital_tagline || null, procedure_charge_enabled ? 1 : 0, req.tenantId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getDoctors, deleteDoctor, resetDoctorPassword, getAnalytics, getDateAvailability, setDateAvailability, setWeeklySchedule, getDateAppointments, reassignAppointments, getRegistrations, getSettings, updateSettings };

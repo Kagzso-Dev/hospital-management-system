@@ -336,7 +336,7 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
 /* ── Dashboard ── */
 function Dashboard() {
   const navigate = useNavigate();
-  const onLogout = () => { localStorage.removeItem('superadmin_token'); navigate('/login'); };
+  const onLogout = () => { sessionStorage.removeItem('superadmin_token'); navigate('/login'); };
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -345,7 +345,7 @@ function Dashboard() {
   useEffect(() => {
     getSuperadminTenants()
       .then((res) => setTenants(res.data))
-      .catch(() => { localStorage.removeItem('superadmin_token'); navigate('/login'); })
+      .catch(() => { sessionStorage.removeItem('superadmin_token'); navigate('/login'); })
       .finally(() => setLoading(false));
   }, [navigate]);
 

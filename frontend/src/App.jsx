@@ -54,22 +54,22 @@ class ChunkErrorBoundary extends Component {
 }
 
 function RequireAuth({ children }) {
-  const token = localStorage.getItem('tenant_token');
+  const token = sessionStorage.getItem('tenant_token');
   const location = useLocation();
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
   return children;
 }
 
 function RequireSuperAdmin({ children }) {
-  const token = localStorage.getItem('superadmin_token');
+  const token = sessionStorage.getItem('superadmin_token');
   const location = useLocation();
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
   return children;
 }
 
 function RedirectIfAuth({ children }) {
-  if (localStorage.getItem('superadmin_token')) return <Navigate to="/superadmin" replace />;
-  if (localStorage.getItem('tenant_token')) return <Navigate to="/home" replace />;
+  if (sessionStorage.getItem('superadmin_token')) return <Navigate to="/superadmin" replace />;
+  if (sessionStorage.getItem('tenant_token')) return <Navigate to="/home" replace />;
   return children;
 }
 

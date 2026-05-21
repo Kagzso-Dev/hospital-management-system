@@ -149,6 +149,21 @@ const TABLES = [
     FOREIGN KEY (appointment_id) REFERENCES appointments(id),
     FOREIGN KEY (patient_id) REFERENCES patients(id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  `CREATE TABLE IF NOT EXISTS reception_charges (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id INT NOT NULL DEFAULT 1,
+    charge_no VARCHAR(30),
+    patient_name VARCHAR(255) NOT NULL,
+    patient_code VARCHAR(50),
+    label VARCHAR(200) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_mode ENUM('cash','upi','card') NOT NULL,
+    transaction_ref VARCHAR(100),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tenant (tenant_id),
+    INDEX idx_date (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 // Each migration is tried individually; duplicate column/key errors are swallowed
@@ -181,6 +196,15 @@ const MIGRATIONS = [
   `ALTER TABLE medicines ADD INDEX idx_tenant (tenant_id)`,
   `ALTER TABLE payments ADD COLUMN tenant_id INT NOT NULL DEFAULT 1`,
   `ALTER TABLE payments ADD INDEX idx_tenant (tenant_id)`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_charge DECIMAL(10,2) DEFAULT 0`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_label VARCHAR(100) DEFAULT NULL`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_paid TINYINT DEFAULT 0`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_payment_mode ENUM('cash','upi','card') NULL`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_paid_at DATETIME NULL`,
+  `ALTER TABLE prescriptions ADD COLUMN procedure_receipt_no VARCHAR(30) NULL`,
+  `ALTER TABLE tenants ADD COLUMN hospital_name VARCHAR(100) NULL DEFAULT NULL`,
+  `ALTER TABLE tenants ADD COLUMN hospital_tagline VARCHAR(100) NULL DEFAULT NULL`,
+  `ALTER TABLE tenants ADD COLUMN procedure_charge_enabled TINYINT DEFAULT 0`,
 ];
 
 async function seedDemo(pool) {

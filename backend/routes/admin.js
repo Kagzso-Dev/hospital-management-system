@@ -3,6 +3,7 @@ const { tenantAuth } = require('../middleware/tenantAuth');
 const {
   getDoctors, getDateAvailability, setDateAvailability, setWeeklySchedule,
   getDateAppointments, reassignAppointments, deleteDoctor, resetDoctorPassword, getAnalytics,
+  getRegistrations, getSettings, updateSettings,
 } = require('../controllers/adminController');
 
 router.get('/doctors', tenantAuth, getDoctors);
@@ -14,5 +15,8 @@ router.put('/availability/date', tenantAuth, setDateAvailability);
 router.put('/availability/weekly', tenantAuth, setWeeklySchedule);
 router.get('/appointments', tenantAuth, getDateAppointments);
 router.post('/reassign', tenantAuth, reassignAppointments);
+router.get('/registrations', tenantAuth, getRegistrations);
+router.get('/settings', tenantAuth, getSettings);
+router.put('/settings', tenantAuth, updateSettings);
 
 module.exports = router;

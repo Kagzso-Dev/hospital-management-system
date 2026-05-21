@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { tenantLogin, superadminLogin } from '../../api';
 
@@ -15,14 +16,21 @@ export default function TenantLogin() {
     setLoading(true);
     try {
       const res = await tenantLogin(form);
-      localStorage.setItem('tenant_token', res.data.token);
-      localStorage.setItem('tenant_info', JSON.stringify(res.data.tenant));
+      const token = res.data.token;
+      sessionStorage.setItem('tenant_token', token);
+      sessionStorage.setItem('tenant_info', JSON.stringify(res.data.tenant));
+      try {
+        const s = await axios.get('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } });
+        if (s.data.hospital_name)    localStorage.setItem('hospital_name',              s.data.hospital_name);
+        if (s.data.hospital_tagline !== undefined) localStorage.setItem('hospital_tagline', s.data.hospital_tagline || '');
+        localStorage.setItem('procedure_charge_enabled', String(!!s.data.procedure_charge_enabled));
+      } catch {}
       navigate('/home', { replace: true });
     } catch (err) {
       if (err.response?.status === 401) {
         try {
           const saRes = await superadminLogin(form);
-          localStorage.setItem('superadmin_token', saRes.data.token);
+          sessionStorage.setItem('superadmin_token', saRes.data.token);
           navigate('/superadmin', { replace: true });
           return;
         } catch {

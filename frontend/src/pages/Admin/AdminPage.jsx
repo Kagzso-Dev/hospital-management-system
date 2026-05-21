@@ -3,10 +3,11 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import AnalyticsDashboard from './AnalyticsDashboard';
 import CollectionReport from './CollectionReport';
+import { updateDoctorFee } from '../../api';
 
 const api = axios.create({ baseURL: '/api/admin' });
 api.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('tenant_token');
+  const token = sessionStorage.getItem('tenant_token');
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   return cfg;
 });
@@ -14,8 +15,8 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('tenant_token');
-      localStorage.removeItem('tenant_info');
+      sessionStorage.removeItem('tenant_token');
+      sessionStorage.removeItem('tenant_info');
       window.location.href = '/login';
     }
     return Promise.reject(err);
@@ -34,6 +35,58 @@ const seedNewDoctorSchedule = async (doctorId) => {
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DOW_LABEL = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+const DOW_FULL  = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' };
+
+const fmtTime = (t) => {
+  if (!t) return '—';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+};
+
+const printSchedule = (doc, rows) => {
+  const rows7 = [1, 2, 3, 4, 5, 6, 7].map((dow) =>
+    rows.find((r) => r.day_of_week === dow) || { day_of_week: dow, is_available: 0, start_time: '09:00', end_time: '17:00', slot_duration: 15 }
+  );
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Schedule – ${doc.name}</title>
+<style>
+  body{font-family:Arial,sans-serif;padding:32px;color:#111}
+  h2{margin:0 0 4px;font-size:20px}
+  .sub{margin:0 0 24px;color:#555;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{background:#f0f4ff;text-align:left;padding:9px 14px;border:1px solid #d0d7f0;color:#334}
+  td{padding:9px 14px;border:1px solid #d0d7f0}
+  .on{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#dcfce7;color:#166534}
+  .off{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#f1f5f9;color:#94a3b8}
+  .dash{color:#ccc}
+  .foot{margin-top:20px;font-size:11px;color:#aaa}
+  .print-btn{display:block;width:100%;margin:18px 0 4px;padding:11px;background:#2563eb;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:8px;cursor:pointer}
+  .print-btn:hover{background:#1d4ed8}
+  @media print{.print-btn{display:none!important}body{padding:0}}
+</style></head><body>
+<h2>Dr. ${doc.name}</h2>
+<p class="sub">${doc.specialty || 'General Physician'}&nbsp;|&nbsp;Consultation Fee: ₹${Number(doc.consultation_fee ?? 300).toLocaleString('en-IN')}</p>
+<table>
+  <thead><tr><th>Day</th><th>Status</th><th>Start</th><th>End</th><th>Slot</th></tr></thead>
+  <tbody>
+    ${rows7.map((r) => `<tr>
+      <td><strong>${DOW_FULL[r.day_of_week]}</strong></td>
+      <td>${r.is_available ? '<span class="on">Active</span>' : '<span class="off">Day Off</span>'}</td>
+      <td>${r.is_available ? fmtTime(r.start_time) : '<span class="dash">—</span>'}</td>
+      <td>${r.is_available ? fmtTime(r.end_time)   : '<span class="dash">—</span>'}</td>
+      <td>${r.is_available ? r.slot_duration + ' min' : '<span class="dash">—</span>'}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>
+<p class="foot">Printed on ${new Date().toLocaleString('en-IN')}</p>
+<button class="print-btn" onclick="window.print()">🖨 Print</button>
+</body></html>`;
+  const w = window.open('', '_blank', 'width=720,height=520');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+};
 
 function localToday() {
   const d = new Date();
@@ -42,14 +95,22 @@ function localToday() {
 
 // ── Weekly schedule row ──────────────────────────────────────────────────────
 function WeekRow({ doc, row, onSave }) {
-  const [form, setForm] = useState({
+  const initial = {
     is_available: row?.is_available ?? 1,
     start_time: row?.start_time ?? '09:00',
     end_time: row?.end_time ?? '17:00',
     slot_duration: row?.slot_duration ?? 15,
-  });
+  };
+  const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved,  setSaved ] = useState(false);
+  const [dirty,  setDirty ] = useState(false);
+
+  const update = (patch) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setDirty(true);
+    setSaved(false);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -60,36 +121,44 @@ function WeekRow({ doc, row, onSave }) {
         ...form,
       });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-      onSave();
-    } catch {}
+      setDirty(false);
+      setTimeout(() => setSaved(false), 2500);
+      onSave(`${DOW_LABEL[row.day_of_week]} schedule saved`);
+    } catch {
+      onSave('Failed to save — please try again', 'error');
+    }
     setSaving(false);
   };
 
+  const isOff = !form.is_available;
+
   return (
-    <div className={`py-2 px-3 rounded-lg text-sm ${form.is_available ? 'bg-white' : 'bg-gray-50 opacity-60'}`}>
-      {/* Row 1: day + toggle + save (always visible) */}
+    <div className={`py-2 px-3 rounded-lg text-sm transition-all ${isOff ? 'bg-gray-50' : 'bg-white'}`}>
+      {/* Row 1: day + toggle + fields + save */}
       <div className="flex items-center gap-2">
-        <div className="w-8 font-medium text-gray-700 flex-shrink-0">{DOW_LABEL[row.day_of_week]}</div>
+        <div className={`w-8 font-medium flex-shrink-0 ${isOff ? 'text-gray-400' : 'text-gray-700'}`}>
+          {DOW_LABEL[row.day_of_week]}
+        </div>
+
         <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
           <input
             type="checkbox"
             className="sr-only peer"
             checked={!!form.is_available}
-            onChange={(e) => setForm({ ...form, is_available: e.target.checked ? 1 : 0 })}
+            onChange={(e) => update({ is_available: e.target.checked ? 1 : 0 })}
           />
           <div className="w-9 h-5 bg-gray-300 peer-checked:bg-blue-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all" />
         </label>
 
-        {/* sm+: inline time fields */}
-        {!!form.is_available && (
+        {/* sm+: inline time fields when active */}
+        {!isOff && (
           <div className="hidden sm:flex items-center gap-2 flex-1">
-            <input type="time" className="input py-1 text-xs" value={form.start_time} disabled={!form.is_available}
-              onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
-            <input type="time" className="input py-1 text-xs" value={form.end_time} disabled={!form.is_available}
-              onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
-            <select className="input py-1 text-xs" value={form.slot_duration} disabled={!form.is_available}
-              onChange={(e) => setForm({ ...form, slot_duration: Number(e.target.value) })}>
+            <input type="time" className="input py-1 text-xs" value={form.start_time}
+              onChange={(e) => update({ start_time: e.target.value })} />
+            <input type="time" className="input py-1 text-xs" value={form.end_time}
+              onChange={(e) => update({ end_time: e.target.value })} />
+            <select className="input py-1 text-xs" value={form.slot_duration}
+              onChange={(e) => update({ slot_duration: Number(e.target.value) })}>
               <option value={10}>10 min</option>
               <option value={15}>15 min</option>
               <option value={20}>20 min</option>
@@ -97,35 +166,62 @@ function WeekRow({ doc, row, onSave }) {
             </select>
           </div>
         )}
-        {!form.is_available && <div className="flex-1 text-xs text-gray-400 hidden sm:block">Day off</div>}
 
+        {/* Day off label */}
+        {isOff && (
+          <div className="flex-1 hidden sm:flex items-center gap-1.5">
+            <span className="text-xs text-gray-400 italic">Day off</span>
+          </div>
+        )}
+
+        {/* Save button — only shown when there are unsaved changes */}
         <div className="ml-auto flex-shrink-0">
-          <button onClick={save} disabled={saving || saved}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1
-              ${saved ? 'bg-green-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}
-              disabled:opacity-50`}>
-            {saving ? '...' : saved ? '✓ Saved' : 'Save'}
-          </button>
+          {dirty && (
+            <button onClick={save} disabled={saving}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
+                isOff
+                  ? 'bg-gray-500 text-white hover:bg-gray-600'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              } disabled:opacity-50`}>
+              {saving ? (
+                <>
+                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  Saving
+                </>
+              ) : 'Save'}
+            </button>
+          )}
+          {saved && !dirty && (
+            <span className="px-3 py-1 text-xs font-semibold rounded-lg bg-green-100 text-green-700 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+              </svg>
+              Saved
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Row 2 (mobile only): time fields when available */}
-      {!!form.is_available && (
+      {/* Row 2 (mobile only): time fields when active */}
+      {!isOff && (
         <div className="sm:hidden mt-2 grid grid-cols-1 xs:grid-cols-3 gap-2">
           <div>
             <div className="text-xs text-gray-400 mb-0.5">Start</div>
             <input type="time" className="input py-1 text-xs" value={form.start_time}
-              onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
+              onChange={(e) => update({ start_time: e.target.value })} />
           </div>
           <div>
             <div className="text-xs text-gray-400 mb-0.5">End</div>
             <input type="time" className="input py-1 text-xs" value={form.end_time}
-              onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+              onChange={(e) => update({ end_time: e.target.value })} />
           </div>
           <div>
             <div className="text-xs text-gray-400 mb-0.5">Slot</div>
             <select className="input py-1 text-xs" value={form.slot_duration}
-              onChange={(e) => setForm({ ...form, slot_duration: Number(e.target.value) })}>
+              onChange={(e) => update({ slot_duration: Number(e.target.value) })}>
               <option value={10}>10 m</option>
               <option value={15}>15 m</option>
               <option value={20}>20 m</option>
@@ -142,9 +238,10 @@ function WeekRow({ doc, row, onSave }) {
 function DateOverride({ doc, allDoctors, onClose }) {
   const [date, setDate] = useState(localToday());
   const [override, setOverride] = useState(null);
-  const [form, setForm] = useState({ is_available: 1, start_time: '09:00', end_time: '17:00', slot_duration: 15 });
+  const [form, setForm] = useState({ is_available: 1, start_time: '09:00', end_time: '17:00', slot_duration: 15, substitute_doctor_id: '' });
   const [appointments, setAppointments] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [reassignTo, setReassignTo] = useState('');
   const [reassigning, setReassigning] = useState(false);
   const [reassignDone, setReassignDone] = useState(null);
@@ -160,6 +257,7 @@ function DateOverride({ doc, allDoctors, onClose }) {
       start_time: avail?.start_time ?? '09:00',
       end_time: avail?.end_time ?? '17:00',
       slot_duration: avail?.slot_duration ?? 15,
+      substitute_doctor_id: avail?.substitute_doctor_id ?? '',
     });
     setAppointments(apts);
     setReassignDone(null);
@@ -172,6 +270,8 @@ function DateOverride({ doc, allDoctors, onClose }) {
     setSaving(true);
     await api.put('/availability/date', { doctor_id: doc.id, date, ...form });
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
     loadDate(date);
   };
 
@@ -189,7 +289,17 @@ function DateOverride({ doc, allDoctors, onClose }) {
   };
 
   const waitingApts = appointments.filter((a) => a.status === 'waiting');
-  const otherDoctors = allDoctors.filter((d) => d.id !== doc.id && d.is_active);
+
+  const dateDow = (() => { const d = new Date(date + 'T12:00:00').getDay(); return d === 0 ? 7 : d; })();
+  const otherDoctors = allDoctors.filter((d) => {
+    if (d.id === doc.id || !d.is_active) return false;
+    // Exclude doctors with a date-specific override marking them off on this date
+    const dateOvr = (d.availability || []).find((a) => a.date === date);
+    if (dateOvr) return !!dateOvr.is_available;
+    // Exclude doctors whose weekly schedule marks this day off
+    const weeklySlot = (d.availability || []).find((a) => a.date === null && a.day_of_week === dateDow);
+    return !weeklySlot || !!weeklySlot.is_available;
+  });
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -200,6 +310,21 @@ function DateOverride({ doc, allDoctors, onClose }) {
             <p className="text-sm text-gray-500">{doc.specialization} — Date Override</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl font-bold">×</button>
+        </div>
+
+        {/* Success toast */}
+        <div className={`overflow-hidden transition-all duration-300 ${saved ? 'max-h-16' : 'max-h-0'}`}>
+          <div className="mx-5 mt-4 flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+            <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-green-800">Schedule saved!</div>
+              <div className="text-xs text-green-600">{doc.name} — {date}</div>
+            </div>
+          </div>
         </div>
 
         <div className="p-5 space-y-5">
@@ -230,6 +355,23 @@ function DateOverride({ doc, allDoctors, onClose }) {
               </label>
             </div>
 
+            {!form.is_available && (
+              <div className="animate-fade-up">
+                <label className="label text-xs">Substitute Doctor <span className="text-gray-400 font-normal">(optional)</span></label>
+                <select
+                  className="input text-sm"
+                  value={form.substitute_doctor_id}
+                  onChange={(e) => setForm({ ...form, substitute_doctor_id: e.target.value })}
+                >
+                  <option value="">— No substitute —</option>
+                  {otherDoctors.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name} · {d.specialization}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">If set, reception will offer booking with this doctor instead.</p>
+              </div>
+            )}
+
             {!!form.is_available && (
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -257,10 +399,27 @@ function DateOverride({ doc, allDoctors, onClose }) {
 
             <button
               onClick={saveOverride}
-              disabled={saving}
-              className="btn-primary w-full"
+              disabled={saving || saved}
+              className={`w-full flex items-center justify-center gap-2 transition-all ${
+                saved ? 'btn-primary bg-green-600 hover:bg-green-600 border-green-600' : 'btn-primary'
+              }`}
             >
-              {saving ? 'Saving...' : 'Save for this Date'}
+              {saving ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Saving...
+                </>
+              ) : saved ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Saved!
+                </>
+              ) : 'Save for this Date'}
             </button>
           </div>
 
@@ -353,7 +512,7 @@ function AddDoctorModal({ onClose, onAdded }) {
     setSaving(true);
     setError('');
     try {
-      const token = localStorage.getItem('tenant_token');
+      const token = sessionStorage.getItem('tenant_token');
       await axios.post('/api/doctors', form, { headers: { Authorization: `Bearer ${token}` } });
       onAdded();
       onClose();
@@ -609,7 +768,12 @@ function SubstituteModal({ doc, dow, currentSubId, allDoctors, onClose, onSaved 
     onClose();
   };
 
-  const others = allDoctors.filter((d) => d.id !== doc.id);
+  const others = allDoctors.filter((d) => {
+    if (d.id === doc.id) return false;
+    const slot = (d.availability || []).find((a) => a.date === null && a.day_of_week === dow);
+    // Exclude doctors explicitly marked off on this day
+    return !slot || !!slot.is_available;
+  });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -626,13 +790,25 @@ function SubstituteModal({ doc, dow, currentSubId, allDoctors, onClose, onSaved 
 
         <div className="p-5 space-y-4">
           <div>
-            <label className="label text-xs">Cover Doctor</label>
-            <select className="input" value={subId} onChange={(e) => setSubId(e.target.value)}>
-              <option value="">— No cover assigned —</option>
-              {others.map((d) => (
-                <option key={d.id} value={d.id}>{d.name} ({d.specialization})</option>
-              ))}
-            </select>
+            <label className="label text-xs">
+              Cover Doctor
+              <span className="ml-1 font-normal text-gray-400">— available on {DAYS[dow - 1]}</span>
+            </label>
+            {others.length === 0 ? (
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-xs text-gray-500">
+                <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                No doctors are available on {DAYS[dow - 1]} to cover
+              </div>
+            ) : (
+              <select className="input" value={subId} onChange={(e) => setSubId(e.target.value)}>
+                <option value="">— No cover assigned —</option>
+                {others.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name} ({d.specialization})</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {subId && (
@@ -681,6 +857,8 @@ const DOC_LIGHT = [
 
 function TimetableView({ doctors, onOverride, onLoad }) {
   const [subTarget, setSubTarget] = useState(null); // { doc, dow, slot }
+  const today = localToday();
+  const todayDow = (() => { const d = new Date(today + 'T12:00:00').getDay(); return d === 0 ? 7 : d; })();
 
   return (
     <div className="space-y-4">
@@ -718,33 +896,57 @@ function TimetableView({ doctors, onOverride, onLoad }) {
           <tbody>
             {[1, 2, 3, 4, 5, 6, 7].map((dow) => {
               const isWeekend = dow === 7;
+              const isToday = dow === todayDow;
               return (
-                <tr key={dow} className={`border-b last:border-0 ${isWeekend ? 'bg-gray-50/60' : 'hover:bg-gray-50/40'}`}>
+                <tr key={dow} className={`border-b last:border-0 ${isToday ? 'bg-blue-50/40' : isWeekend ? 'bg-gray-50/60' : 'hover:bg-gray-50/40'}`}>
                   <td className="px-4 py-3 font-semibold text-gray-700">
-                    <div>{DAYS[dow - 1]}</div>
-                    {isWeekend && <div className="text-xs text-gray-400 font-normal">Weekend</div>}
+                    <div className={isToday ? 'text-blue-600' : ''}>{DAYS[dow - 1]}</div>
+                    {isToday && <div className="text-[10px] text-blue-400 font-normal">Today</div>}
+                    {isWeekend && !isToday && <div className="text-xs text-gray-400 font-normal">Weekend</div>}
                   </td>
                   {doctors.map((doc, i) => {
                     const weekly = (doc.availability || []).filter((a) => a.date === null);
-                    const slot = weekly.find((r) => r.day_of_week === dow);
+                    const weeklySlot = weekly.find((r) => r.day_of_week === dow);
+                    // For today's row, check if there's a date override
+                    const dateOverride = isToday
+                      ? (doc.availability || []).find((a) => a.date === today)
+                      : null;
+                    const slot = dateOverride || weeklySlot;
                     const on = slot?.is_available;
+                    const hasOverride = !!dateOverride;
                     return (
                       <td key={doc.id} className="px-3 py-3 text-center">
                         {on ? (
-                          <div
-                            className={`inline-flex flex-col items-center rounded-xl border px-3 py-2 cursor-pointer hover:shadow-md transition-shadow ${DOC_LIGHT[i % DOC_LIGHT.length]}`}
-                            onClick={() => onOverride(doc)}
-                            title="Click to set date override"
-                          >
-                            <span className="font-semibold text-xs">{slot.start_time} – {slot.end_time}</span>
-                            <span className="text-xs opacity-70 mt-0.5">{slot.slot_duration} min slots</span>
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <div
+                              className={`inline-flex flex-col items-center rounded-xl border px-3 py-2 cursor-pointer hover:shadow-md transition-shadow ${
+                                hasOverride
+                                  ? 'bg-violet-50 border-violet-300 ring-1 ring-violet-300'
+                                  : DOC_LIGHT[i % DOC_LIGHT.length]
+                              }`}
+                              onClick={() => onOverride(doc)}
+                              title={hasOverride ? 'Date override active — click to edit' : 'Click to set date override'}
+                            >
+                              <span className="font-semibold text-xs">{slot.start_time} – {slot.end_time}</span>
+                              <span className="text-xs opacity-70 mt-0.5">{slot.slot_duration} min slots</span>
+                            </div>
+                            {hasOverride && (
+                              <span className="text-[9px] font-bold text-violet-500 uppercase tracking-wide">Override</span>
+                            )}
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-1">
                             {/* Off badge */}
-                            <span className="inline-block px-3 py-1 rounded-lg bg-gray-100 text-gray-400 text-xs font-medium">
+                            <span className={`inline-block px-3 py-1 rounded-lg text-xs font-medium ${
+                              hasOverride
+                                ? 'bg-violet-100 text-violet-500 ring-1 ring-violet-300'
+                                : 'bg-gray-100 text-gray-400'
+                            }`}>
                               Off
                             </span>
+                            {hasOverride && (
+                              <span className="text-[9px] font-bold text-violet-500 uppercase tracking-wide">Override today</span>
+                            )}
                             {/* Cover doctor if assigned */}
                             {slot?.substitute_name ? (
                               <button
@@ -757,7 +959,7 @@ function TimetableView({ doctors, onOverride, onLoad }) {
                                 </svg>
                                 {slot.substitute_name.replace('Dr. ', '')}
                               </button>
-                            ) : (
+                            ) : !hasOverride ? (
                               <button
                                 onClick={() => setSubTarget({ doc, dow, slot })}
                                 className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white border border-dashed border-gray-300 text-gray-400 text-[10px] hover:border-blue-400 hover:text-blue-500 transition"
@@ -768,7 +970,7 @@ function TimetableView({ doctors, onOverride, onLoad }) {
                                 </svg>
                                 Assign cover
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         )}
                       </td>
@@ -1027,7 +1229,7 @@ function TokenBoardView() {
 
   const load = useCallback(async () => {
     try {
-      const token = localStorage.getItem('tenant_token');
+      const token = sessionStorage.getItem('tenant_token');
       const { data } = await axios.get('/api/tokens/display/all', { headers: { Authorization: `Bearer ${token}` } });
       setDoctors(data);
     } catch {}
@@ -1036,7 +1238,7 @@ function TokenBoardView() {
 
   useEffect(() => {
     load();
-    const tenantInfo = JSON.parse(localStorage.getItem('tenant_info') || '{}');
+    const tenantInfo = JSON.parse(sessionStorage.getItem('tenant_info') || '{}');
     const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
     socket.on(`token_update_${tenantId}`, load);
@@ -1341,6 +1543,260 @@ function DoctorAnalyticsModal({ doc, onClose }) {
   );
 }
 
+// ── Registrations View ───────────────────────────────────────────────────────
+function RegistrationsView() {
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const [date, setDate] = useState(todayStr());
+  const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (!showAll) params.set('date', date);
+      if (search.trim()) params.set('search', search.trim());
+      const { data: res } = await api.get(`/registrations?${params}`);
+      setData(res);
+    } catch {}
+    setLoading(false);
+  }, [date, showAll, search]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const shiftDate = (days) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    setDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+    setShowAll(false);
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+  };
+  const fmtTime = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true });
+  };
+  const fmtDOB = (dob) => {
+    if (!dob) return null;
+    try { return new Date(dob).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }); }
+    catch { return dob; }
+  };
+
+  const patients = data?.patients || [];
+  const stats = data?.stats || { today: 0, week: 0, total: 0 };
+
+  const displayLabel = showAll
+    ? 'All Registrations'
+    : date === todayStr()
+      ? 'Today'
+      : new Date(date).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Today's New", value: stats.today, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+          { label: 'This Week',   value: stats.week,  color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' },
+          { label: 'Total Patients', value: stats.total, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+        ].map(s => (
+          <div key={s.label} className={`${s.bg} ${s.border} border rounded-xl p-3 sm:p-4 text-center`}>
+            <div className={`text-2xl sm:text-3xl font-black ${s.color}`}>{s.value}</div>
+            <div className="text-xs text-gray-500 font-medium mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="card p-3 sm:p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        {/* Date nav */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => shiftDate(-1)}
+            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-500 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <input
+            type="date" value={date}
+            onChange={e => { setDate(e.target.value); setShowAll(false); }}
+            className="input text-sm py-1.5 px-2 w-auto"
+          />
+          <button onClick={() => shiftDate(1)}
+            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-500 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+          <button onClick={() => { setDate(todayStr()); setShowAll(false); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+              !showAll && date === todayStr()
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}>
+            Today
+          </button>
+          <button onClick={() => setShowAll(v => !v)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+              showAll ? 'bg-violet-600 text-white border-violet-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}>
+            All
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative w-full sm:w-64">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input
+            type="text" placeholder="Search name, phone, ID…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            className="input pl-8 text-sm py-1.5 w-full"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="card overflow-hidden p-0">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span className="text-sm font-semibold text-gray-700">{displayLabel}</span>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full">
+            {loading ? '…' : `${patients.length} patient${patients.length !== 1 ? 's' : ''}`}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="space-y-2 p-4">
+            {[1,2,3,4].map(i => (
+              <div key={i} className="skeleton h-14 rounded-lg" />
+            ))}
+          </div>
+        ) : patients.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 gap-2 text-gray-400">
+            <svg className="w-10 h-10 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <p className="text-sm font-medium">No registrations found</p>
+            <p className="text-xs">Try a different date or search term</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {patients.map((p, idx) => {
+              const isOpen = expandedId === p.id;
+              return (
+                <div key={p.id}
+                  className={`transition-colors ${isOpen ? 'bg-blue-50/40' : 'hover:bg-gray-50/60'}`}>
+                  {/* Main row */}
+                  <button
+                    className="w-full text-left px-4 py-3 flex items-center gap-3"
+                    onClick={() => setExpandedId(isOpen ? null : p.id)}>
+                    {/* Index */}
+                    <div className="w-6 text-xs font-bold text-gray-300 flex-shrink-0">{idx + 1}</div>
+                    {/* Avatar */}
+                    <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold
+                      ${p.gender === 'Female' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {p.name?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    {/* Name + ID */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-gray-800 text-sm truncate">{p.name}</div>
+                      <div className="text-xs text-gray-400 flex items-center gap-2 mt-0.5">
+                        <span className="font-mono font-medium text-blue-600">{p.patient_id}</span>
+                        {p.gender && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${p.gender === 'Female' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>{p.gender}</span>}
+                        {p.age && <span className="text-gray-400">{p.age} yrs</span>}
+                      </div>
+                    </div>
+                    {/* Phone */}
+                    <div className="hidden sm:block text-sm text-gray-600 font-medium flex-shrink-0">{p.phone}</div>
+                    {/* Registered date */}
+                    <div className="hidden md:block text-right flex-shrink-0">
+                      <div className="text-xs font-semibold text-gray-600">{fmtDate(p.created_at)}</div>
+                      <div className="text-[10px] text-gray-400">{fmtTime(p.created_at)}</div>
+                    </div>
+                    {/* Visits badge */}
+                    <div className="flex-shrink-0">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        p.visit_count > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                      }`}>
+                        {p.visit_count} visit{p.visit_count !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {/* Chevron */}
+                    <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+
+                  {/* Expanded detail */}
+                  {isOpen && (
+                    <div className="px-4 pb-4 ml-9">
+                      <div className="bg-white rounded-xl border border-blue-100 p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Patient ID</div>
+                          <div className="font-mono font-semibold text-blue-600">{p.patient_id}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Phone</div>
+                          <div className="font-medium text-gray-700">{p.phone || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Gender</div>
+                          <div className="font-medium text-gray-700">{p.gender || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Age</div>
+                          <div className="font-medium text-gray-700">{p.age ? `${p.age} years` : '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Date of Birth</div>
+                          <div className="font-medium text-gray-700">{fmtDOB(p.dob) || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Total Visits</div>
+                          <div className="font-medium text-emerald-600">{p.visit_count}</div>
+                        </div>
+                        <div className="col-span-2 sm:col-span-3">
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Address</div>
+                          <div className="font-medium text-gray-700">{p.address || '—'}</div>
+                        </div>
+                        <div className="col-span-2 sm:col-span-3">
+                          <div className="text-[10px] text-gray-400 uppercase font-bold tracking-wide mb-1">Registered On</div>
+                          <div className="font-medium text-gray-700">
+                            {fmtDate(p.created_at)} &nbsp;at&nbsp; {fmtTime(p.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Admin Page ──────────────────────────────────────────────────────────
 export default function AdminPage() {
   const [doctors, setDoctors] = useState([]);
@@ -1351,7 +1807,17 @@ export default function AdminPage() {
   const [resetPwDoc, setResetPwDoc] = useState(null);
   const [analyticsDoc, setAnalyticsDoc] = useState(null);
   const [showAddDoctor, setShowAddDoctor] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('admin_tab') || 'doctors'); // 'doctors' | 'timetable' | etc
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('admin_tab') || 'doctors');
+  const [feeEdits,  setFeeEdits ] = useState({});
+  const [savingFee, setSavingFee] = useState({});
+  const [toast, setToast] = useState(null); // { msg, type }
+  const toastTimer = React.useRef(null);
+
+  const showToast = React.useCallback((msg, type = 'success') => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, type });
+    toastTimer.current = setTimeout(() => setToast(null), 2800);
+  }, []);
 
   React.useEffect(() => {
     sessionStorage.setItem('admin_tab', activeTab);
@@ -1362,6 +1828,18 @@ export default function AdminPage() {
     const { data } = await api.get('/doctors');
     setDoctors(data);
     setLoading(false);
+  };
+
+  const saveFee = async (docId) => {
+    const fee = Number(feeEdits[docId]);
+    if (isNaN(fee) || fee < 0) return;
+    setSavingFee((prev) => ({ ...prev, [docId]: true }));
+    try {
+      await updateDoctorFee(docId, fee);
+      setDoctors((prev) => prev.map((d) => d.id === docId ? { ...d, consultation_fee: fee } : d));
+      setFeeEdits((prev) => { const next = { ...prev }; delete next[docId]; return next; });
+    } catch {}
+    setSavingFee((prev) => { const next = { ...prev }; delete next[docId]; return next; });
   };
 
   useEffect(() => { load(); }, []);
@@ -1418,7 +1896,8 @@ export default function AdminPage() {
           { key: 'timetable',  label: 'Timetable View',   icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
           { key: 'analytics',  label: 'Analytics',        icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
           { key: 'tokenboard', label: 'Token Board',      icon: 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z' },
-          { key: 'collection', label: 'Collection',       icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
+          { key: 'collection',     label: 'Collection',     icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
+          { key: 'registrations', label: 'Registrations',  icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -1446,17 +1925,57 @@ export default function AdminPage() {
 
             return (
               <div key={doc.id} className="card animate-fade-up" style={{ animationDelay: `${idx * 60}ms` }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
                       {doc.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}
                     </div>
-                    <div>
-                      <div className="font-semibold text-gray-900">{doc.name}</div>
-                      <div className="text-sm text-gray-500">{doc.specialization}</div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-900 truncate">{doc.name}</div>
+                      <div className="text-sm text-gray-500 truncate">{doc.specialization}</div>
+
+                      {/* Inline fee editor */}
+                      {feeEdits[doc.id] !== undefined ? (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className="text-xs text-slate-400 font-semibold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            autoFocus
+                            className="w-20 border border-blue-400 rounded-lg px-2 py-0.5 text-xs font-bold text-green-700 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                            value={feeEdits[doc.id]}
+                            onChange={(e) => setFeeEdits((prev) => ({ ...prev, [doc.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveFee(doc.id); if (e.key === 'Escape') setFeeEdits((prev) => { const n = {...prev}; delete n[doc.id]; return n; }); }}
+                          />
+                          <button
+                            onClick={() => saveFee(doc.id)}
+                            disabled={savingFee[doc.id]}
+                            className="text-[11px] px-2 py-0.5 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-500 disabled:opacity-50 transition-all"
+                          >
+                            {savingFee[doc.id] ? '...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => setFeeEdits((prev) => { const n = {...prev}; delete n[doc.id]; return n; })}
+                            className="text-[11px] px-1.5 py-0.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 transition-all"
+                          >✕</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setFeeEdits((prev) => ({ ...prev, [doc.id]: String(doc.consultation_fee ?? 300) }))}
+                          className="flex items-center gap-1 mt-1.5 group"
+                          title="Click to edit consultation fee"
+                        >
+                          <span className="text-xs font-bold text-green-600 group-hover:underline">
+                            ₹{Number(doc.consultation_fee ?? 300).toLocaleString('en-IN')}
+                          </span>
+                          <svg className="w-3 h-3 text-gray-300 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => setAnalyticsDoc(doc)}
                       className="p-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all"
@@ -1517,19 +2036,31 @@ export default function AdminPage() {
 
                 {isExpanded && (
                   <div className="mt-4 space-y-1 border-t pt-4">
-                    <div className="hidden sm:grid grid-cols-12 gap-2 text-xs font-medium text-gray-400 px-3 mb-1">
-                      <div className="col-span-1">Day</div>
-                      <div className="col-span-2">Active</div>
-                      <div className="col-span-3">Start</div>
-                      <div className="col-span-3">End</div>
-                      <div className="col-span-2">Slot</div>
-                      <div className="col-span-1"></div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="hidden sm:grid grid-cols-12 gap-2 text-xs font-medium text-gray-400 px-3 flex-1">
+                        <div className="col-span-1">Day</div>
+                        <div className="col-span-2">Active</div>
+                        <div className="col-span-3">Start</div>
+                        <div className="col-span-3">End</div>
+                        <div className="col-span-2">Slot</div>
+                        <div className="col-span-1"></div>
+                      </div>
+                      <button
+                        onClick={() => printSchedule(doc, weeklyRows)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all flex-shrink-0"
+                        title="Print weekly schedule"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Print
+                      </button>
                     </div>
                     {[1, 2, 3, 4, 5, 6, 7].map((dow) => {
                       const row = weeklyRows.find((r) => r.day_of_week === dow) || {
                         day_of_week: dow, is_available: 0, start_time: '09:00', end_time: '17:00', slot_duration: 15,
                       };
-                      return <WeekRow key={dow} doc={doc} row={row} onSave={load} />;
+                      return <WeekRow key={dow} doc={doc} row={row} onSave={showToast} />;
                     })}
                   </div>
                 )}
@@ -1552,6 +2083,9 @@ export default function AdminPage() {
 
       {/* Tab: Collection Report */}
       {activeTab === 'collection' && <CollectionReport />}
+
+      {/* Tab: Registrations */}
+      {activeTab === 'registrations' && <RegistrationsView />}
 
       {overrideDoc && (
         <DateOverride
@@ -1593,6 +2127,36 @@ export default function AdminPage() {
           doc={analyticsDoc}
           onClose={() => setAnalyticsDoc(null)}
         />
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          key={toast.msg + Date.now()}
+          style={{
+            position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 9999, animation: 'toastIn 0.28s cubic-bezier(.34,1.56,.64,1) both',
+          }}>
+          <style>{`
+            @keyframes toastIn {
+              from { opacity:0; transform:translateX(-50%) translateY(16px) scale(0.95); }
+              to   { opacity:1; transform:translateX(-50%) translateY(0)    scale(1);    }
+            }
+          `}</style>
+          <div className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold text-white
+            ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+            {toast.type === 'error' ? (
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+              </svg>
+            )}
+            {toast.msg}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,7 +1,10 @@
 const router = require('express').Router();
 const { tenantAuth } = require('../middleware/tenantAuth');
-const { createPrescription, getPatientPrescriptions, getAppointmentPrescription } = require('../controllers/prescriptionController');
+const { createPrescription, getPatientPrescriptions, getAppointmentPrescription, getProcedureCharges, getPendingProcedureCharges, payProcedureCharge } = require('../controllers/prescriptionController');
 router.post('/', tenantAuth, createPrescription);
+router.get('/procedure-charges', tenantAuth, getProcedureCharges);
+router.get('/pending-procedures', tenantAuth, getPendingProcedureCharges);
+router.post('/pay-procedure/:id', tenantAuth, payProcedureCharge);
 router.get('/appointment/:appointment_id', tenantAuth, getAppointmentPrescription);
 router.get('/patient/:patient_id', tenantAuth, getPatientPrescriptions);
 module.exports = router;

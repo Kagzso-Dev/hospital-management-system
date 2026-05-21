@@ -3,9 +3,10 @@ import { useReactToPrint } from 'react-to-print';
 import {
   createPrescription, getPatientPrescriptions,
   updateAppointmentStatus, searchMedicines, getAppointmentPrescription,
-  getMedicineDetails,
+  getMedicineDetails, getPayment,
 } from '../../api';
 import PrintPrescription from '../../components/PrintPrescription';
+import PrintBill from '../../components/PrintBill';
 
 function MedicineRow({ item, onChange, onRemove, disabled }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -81,25 +82,46 @@ function MedicineRow({ item, onChange, onRemove, disabled }) {
 
       {/* Suggestions Dropdown */}
       {!disabled && showSugg && suggestions.length > 0 && (
-        <div className="absolute z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-full mt-1 max-h-56 overflow-y-auto overflow-x-hidden animate-fade-in">
-          {suggestions.map((m, idx) => (
-            <button
-              key={`${m.name}-${idx}`}
-              type="button"
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 flex items-center justify-between border-b last:border-0 border-gray-50 transition-colors"
-              onMouseDown={() => selectMedicine(m)}
-            >
-              <div className="min-w-0">
-                <div className="font-semibold text-gray-800 truncate">{m.name}</div>
-                <div className="text-[10px] text-gray-500 truncate uppercase tracking-wider">{m.generic_name || 'Medicine'}</div>
-              </div>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ml-2 ${
-                m.category === 'FDA Result' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
-              }`}>
-                {m.category || 'Local'}
-              </span>
-            </button>
-          ))}
+        <div className="absolute z-50 bg-white border border-blue-100 rounded-2xl shadow-2xl w-full mt-1.5 overflow-hidden animate-fade-in"
+          style={{ boxShadow: '0 8px 32px rgba(37,99,235,0.13)' }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-blue-50 border-b border-blue-100">
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Medicines</span>
+            <span className="text-[10px] text-blue-400 font-medium">{suggestions.length} found</span>
+          </div>
+          {/* Scrollable list */}
+          <div className="max-h-52 overflow-y-auto">
+            {suggestions.map((m, idx) => (
+              <button
+                key={`${m.name}-${idx}`}
+                type="button"
+                className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-blue-50 active:bg-blue-100 border-b border-gray-50 last:border-0 transition-colors group"
+                onMouseDown={() => selectMedicine(m)}
+              >
+                {/* Icon */}
+                <div className="w-7 h-7 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <svg width="13" height="13" fill="none" stroke="#2563eb" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                  </svg>
+                </div>
+                {/* Text */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-gray-800 text-sm truncate leading-tight">{m.name}</div>
+                  {m.generic_name && (
+                    <div className="text-[10px] text-gray-400 truncate uppercase tracking-wide leading-tight mt-0.5">{m.generic_name}</div>
+                  )}
+                </div>
+                {/* Category badge */}
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                  m.category === 'FDA Result'
+                    ? 'bg-orange-100 text-orange-600 border border-orange-200'
+                    : 'bg-green-100 text-green-700 border border-green-200'
+                }`}>
+                  {m.category === 'FDA Result' ? 'FDA' : 'Local'}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -132,61 +154,66 @@ function MedicineRow({ item, onChange, onRemove, disabled }) {
     </div>
   );
 
-  const checkboxes = (
-    <div className="flex gap-2 items-center flex-shrink-0">
-      {['morning', 'afternoon', 'night'].map((t) => (
-        <label key={t} className={`flex items-center gap-1 text-xs ${disabled ? 'cursor-default' : 'cursor-pointer'}`}>
-          <input type="checkbox" className="rounded" checked={!!item[t]} disabled={disabled}
-            onChange={(e) => onChange(t, e.target.checked)} />
-          {t[0].toUpperCase()}
-        </label>
-      ))}
-    </div>
-  );
-
   return (
-    <div className="space-y-3 p-3 bg-gray-50/50 rounded-2xl border border-gray-100 sm:bg-transparent sm:p-0 sm:border-0 sm:space-y-2">
-      {/* Row 1: name + dosage */}
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 items-stretch sm:items-start">
-        {nameInput}
-        <div className="flex gap-2">
-          <div className="flex-1 sm:w-24 sm:flex-shrink-0">
-            <input className="input text-sm" placeholder="Dosage" value={item.dosage} disabled={disabled}
-              onChange={(e) => onChange('dosage', e.target.value)} />
-          </div>
-          {!disabled && (
-            <button type="button" onClick={onRemove}
-              className="sm:hidden flex-shrink-0 text-red-500 hover:text-red-700 w-11 h-11 flex items-center justify-center bg-white border border-gray-200 rounded-xl shadow-sm">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
-        </div>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      {/* Row 1 — name · dosage · delete */}
+      <div className="flex items-center gap-2 p-2">
+        <div className="flex-1 min-w-0">{nameInput}</div>
+        <input
+          className="input text-sm w-20 sm:w-28 flex-shrink-0"
+          placeholder="Dosage"
+          value={item.dosage}
+          disabled={disabled}
+          onChange={(e) => onChange('dosage', e.target.value)}
+        />
+        {!disabled && (
+          <button type="button" onClick={onRemove} title="Remove"
+            className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Row 2: M/A/N + days + delete (desktop) */}
-      <div className="flex items-center justify-between sm:justify-start gap-3 pl-0">
-        <div className="flex-1 sm:flex-none">
-          {checkboxes}
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-20 sm:w-16 flex-shrink-0">
-            <div className="relative">
-              <input type="number" className="input text-sm pr-7" placeholder="Days" value={item.duration} disabled={disabled}
-                onChange={(e) => onChange('duration', e.target.value)} min="1" />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">D</span>
-            </div>
-          </div>
-          {!disabled && (
-            <button type="button" onClick={onRemove}
-              className="hidden sm:flex text-gray-400 hover:text-red-600 transition-colors p-1"
-              title="Remove medicine">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
+      {/* Row 2 — timing pills · duration */}
+      <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-t border-gray-100">
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">Timing</span>
+        <div className="flex gap-1.5">
+          {[
+            { key: 'morning',   label: 'Morning',   short: 'M', active: 'bg-amber-500 text-white border-amber-400'   },
+            { key: 'afternoon', label: 'Afternoon',  short: 'A', active: 'bg-sky-500 text-white border-sky-400'      },
+            { key: 'night',     label: 'Night',      short: 'N', active: 'bg-indigo-600 text-white border-indigo-500' },
+          ].map(({ key, label, short, active }) => (
+            <button
+              key={key}
+              type="button"
+              disabled={disabled}
+              onClick={() => !disabled && onChange(key, !item[key])}
+              title={label}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex-shrink-0 ${
+                item[key] ? active : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+              } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+            >
+              {short}
             </button>
-          )}
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Days</span>
+          <div className="relative w-16">
+            <input
+              type="number"
+              min="1"
+              className="input text-sm text-center pr-5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              placeholder="—"
+              value={item.duration}
+              disabled={disabled}
+              onChange={(e) => onChange('duration', e.target.value)}
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">d</span>
+          </div>
         </div>
       </div>
     </div>
@@ -243,16 +270,25 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
   const [saving, setSaving] = useState(false);
   const [savedRx, setSavedRx] = useState(null);
   const [historyKey, setHistoryKey] = useState(0);
+  const [procedureCharge, setProcedureCharge] = useState('');
+  const [procedureLabel, setProcedureLabel] = useState('');
+  const [paymentData, setPaymentData] = useState(null);
+  const procedureEnabled = localStorage.getItem('procedure_charge_enabled') === 'true';
   const printRef = useRef();
+  const billRef = useRef();
 
   const handlePrint = useReactToPrint({ content: () => printRef.current });
+  const handlePrintBill = useReactToPrint({ content: () => billRef.current });
 
   const isCompleted = appointment.status === 'completed';
 
-  // Load existing prescription when viewing a completed appointment
+  // Load existing prescription + payment when viewing a completed appointment
   useEffect(() => {
     if (!isCompleted) return;
-    getAppointmentPrescription(appointment.id).then(({ data: rx }) => {
+    Promise.all([
+      getAppointmentPrescription(appointment.id),
+      getPayment(appointment.id).catch(() => ({ data: null })),
+    ]).then(([{ data: rx }, { data: pmt }]) => {
       if (!rx) return;
       setDiagnosis(rx.diagnosis || '');
       setNotes(rx.notes || '');
@@ -268,7 +304,10 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
           }))
         : [emptyItem()]
       );
+      setProcedureCharge(rx.procedure_charge > 0 ? String(rx.procedure_charge) : '');
+      setProcedureLabel(rx.procedure_label || '');
       setSavedRx({ ...rx, doctor, patient: appointment.patient, appointment });
+      setPaymentData(pmt);
     });
   }, [appointment.id, isCompleted]);
 
@@ -290,6 +329,8 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
         diagnosis,
         notes,
         items: filledItems,
+        procedure_charge: procedureCharge ? Number(procedureCharge) : 0,
+        procedure_label:  procedureLabel.trim() || null,
       });
       await updateAppointmentStatus(appointment.id, 'completed');
       setSavedRx({ ...rx, doctor, patient: appointment.patient, appointment });
@@ -316,10 +357,16 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             {savedRx && (
-              <button onClick={handlePrint} className="btn-secondary text-xs sm:text-sm px-2 sm:px-4">
-                <span className="hidden sm:inline">🖨 Print Rx</span>
-                <span className="sm:hidden">🖨</span>
-              </button>
+              <>
+                <button onClick={handlePrint} className="btn-secondary text-xs sm:text-sm px-2 sm:px-4">
+                  <span className="hidden sm:inline">🖨 Print Rx</span>
+                  <span className="sm:hidden">🖨</span>
+                </button>
+                <button onClick={handlePrintBill} className="text-xs sm:text-sm px-2 sm:px-4 btn-secondary bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100">
+                  <span className="hidden sm:inline">🧾 Print Bill</span>
+                  <span className="sm:hidden">🧾</span>
+                </button>
+              </>
             )}
             <button onClick={onClose} className="btn-secondary text-xs sm:text-sm px-2 sm:px-4">Close</button>
           </div>
@@ -368,6 +415,45 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
               )}
             </div>
 
+            {/* Procedure Charge — only shown when enabled in Admin Settings */}
+            {procedureEnabled && (
+              <div className={`rounded-xl border p-3 space-y-2 ${savedRx && !procedureCharge ? 'hidden' : ''} ${savedRx ? 'bg-orange-50 border-orange-200' : 'bg-orange-50/60 border-orange-200'}`}>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs font-bold text-orange-700 uppercase tracking-wider">Procedure Charge</span>
+                  <span className="text-xs text-gray-400">(optional)</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    className="input flex-1 text-sm"
+                    placeholder="e.g. Injection, IV Drip, Inhaler, Dressing"
+                    value={procedureLabel}
+                    disabled={!!savedRx}
+                    onChange={(e) => setProcedureLabel(e.target.value)}
+                  />
+                  <div className="relative w-28 flex-shrink-0">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-500 pointer-events-none">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input pl-7 text-sm font-bold text-orange-700 w-full"
+                      placeholder="0"
+                      value={procedureCharge}
+                      disabled={!!savedRx}
+                      onChange={(e) => setProcedureCharge(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {savedRx && procedureCharge && (
+                  <div className="text-xs text-orange-600 font-medium">
+                    {procedureLabel || 'Procedure'} — ₹{Number(procedureCharge).toLocaleString('en-IN')} (to be collected at billing)
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="label">Notes</label>
               <textarea
@@ -409,6 +495,19 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
       {savedRx && (
         <div className="hidden">
           <PrintPrescription ref={printRef} prescription={savedRx} />
+          <PrintBill
+            ref={billRef}
+            bill={{
+              doctor,
+              patient: appointment.patient,
+              appointment,
+              consultationFee: paymentData?.amount ?? doctor?.consultation_fee ?? 0,
+              procedureCharge: savedRx.procedure_charge,
+              procedureLabel: savedRx.procedure_label,
+              paymentStatus: paymentData ? 'paid' : appointment.payment_status,
+              hospitalName: localStorage.getItem('hospital_name') || 'Hospital Management System',
+            }}
+          />
         </div>
       )}
     </div>

@@ -2,14 +2,16 @@ const db = require('../db/database');
 
 const createPrescription = async (req, res) => {
   try {
-    const { appointment_id, doctor_id, patient_id, diagnosis, notes, items } = req.body;
+    const { appointment_id, doctor_id, patient_id, diagnosis, notes, items, procedure_charge, procedure_label } = req.body;
     const tenantId = req.tenantId;
     let rxId;
 
     await db.transaction(async (conn) => {
       const [result] = await conn.execute(
-        'INSERT INTO prescriptions (tenant_id, appointment_id, doctor_id, patient_id, diagnosis, notes) VALUES (?, ?, ?, ?, ?, ?)',
-        [tenantId, appointment_id || null, doctor_id, patient_id, diagnosis || null, notes || null]
+        'INSERT INTO prescriptions (tenant_id, appointment_id, doctor_id, patient_id, diagnosis, notes, procedure_charge, procedure_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [tenantId, appointment_id || null, doctor_id, patient_id, diagnosis || null, notes || null,
+          Number(procedure_charge) > 0 ? Number(procedure_charge) : 0,
+          procedure_label || null]
       );
       rxId = result.insertId;
 
@@ -75,4 +77,106 @@ const getAppointmentPrescription = async (req, res) => {
   }
 };
 
-module.exports = { createPrescription, getPatientPrescriptions, getAppointmentPrescription };
+const getProcedureCharges = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const today = date || new Date().toISOString().split('T')[0];
+    const [rows] = await db.query(
+      `SELECT rx.id, rx.procedure_charge, rx.procedure_label, rx.created_at,
+              p.name as patient_name, p.patient_id as patient_code,
+              d.name as doctor_name,
+              a.date as appt_date, a.time_slot, a.token_display
+       FROM prescriptions rx
+       LEFT JOIN patients p ON rx.patient_id = p.id
+       LEFT JOIN doctors d ON rx.doctor_id = d.id
+       LEFT JOIN appointments a ON rx.appointment_id = a.id
+       WHERE rx.tenant_id = ? AND rx.procedure_charge > 0 AND DATE(rx.created_at) = ?
+       ORDER BY rx.created_at DESC`,
+      [req.tenantId, today]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getPendingProcedureCharges = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const [rows] = await db.query(
+      `SELECT rx.id, rx.procedure_charge, rx.procedure_label, rx.created_at,
+              p.name as patient_name, p.patient_id as patient_code, p.age, p.gender,
+              d.name as doctor_name, d.specialization,
+              a.id as appointment_id, a.date as appt_date, a.time_slot, a.token_display,
+              py.amount as consult_amount, py.payment_mode as consult_mode
+       FROM prescriptions rx
+       JOIN appointments a ON rx.appointment_id = a.id
+       JOIN patients p ON rx.patient_id = p.id
+       JOIN doctors d ON rx.doctor_id = d.id
+       LEFT JOIN payments py ON py.appointment_id = a.id AND py.payment_status = 'paid'
+       WHERE rx.tenant_id = ? AND rx.procedure_charge > 0 AND rx.procedure_paid = 0
+         AND a.date = ?
+       ORDER BY rx.created_at DESC`,
+      [req.tenantId, today]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+function procReceiptNo(id) {
+  return `PR-${String(id).padStart(4, '0')}`;
+}
+
+const payProcedureCharge = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payment_mode, transaction_ref } = req.body;
+    const tenantId = req.tenantId;
+
+    if (!payment_mode) return res.status(400).json({ error: 'payment_mode required' });
+    const validModes = ['cash', 'upi', 'card'];
+    if (!validModes.includes(payment_mode)) return res.status(400).json({ error: 'Invalid payment_mode' });
+
+    const [[rx]] = await db.query(
+      'SELECT * FROM prescriptions WHERE id = ? AND tenant_id = ?',
+      [id, tenantId]
+    );
+    if (!rx) return res.status(404).json({ error: 'Prescription not found' });
+    if (rx.procedure_paid) return res.status(400).json({ error: 'Procedure charge already paid' });
+    if (!rx.procedure_charge || Number(rx.procedure_charge) <= 0) {
+      return res.status(400).json({ error: 'No procedure charge on this prescription' });
+    }
+
+    const receiptNo = procReceiptNo(rx.id);
+    const paidAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    await db.execute(
+      `UPDATE prescriptions
+       SET procedure_paid = 1, procedure_payment_mode = ?, procedure_paid_at = ?, procedure_receipt_no = ?
+       WHERE id = ? AND tenant_id = ?`,
+      [payment_mode, paidAt, receiptNo, id, tenantId]
+    );
+
+    const [[updated]] = await db.query(
+      `SELECT rx.*, p.name as patient_name, p.patient_id as patient_code, p.age, p.gender,
+              d.name as doctor_name, d.specialization,
+              a.token_display, a.date as appt_date, a.time_slot,
+              py.amount as consult_amount
+       FROM prescriptions rx
+       JOIN patients p ON rx.patient_id = p.id
+       JOIN doctors d ON rx.doctor_id = d.id
+       LEFT JOIN appointments a ON rx.appointment_id = a.id
+       LEFT JOIN payments py ON py.appointment_id = a.id AND py.payment_status = 'paid'
+       WHERE rx.id = ?`,
+      [id]
+    );
+
+    res.json({ ...updated, procedure_receipt_no: receiptNo, transaction_ref: transaction_ref || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { createPrescription, getPatientPrescriptions, getAppointmentPrescription, getProcedureCharges, getPendingProcedureCharges, payProcedureCharge };
