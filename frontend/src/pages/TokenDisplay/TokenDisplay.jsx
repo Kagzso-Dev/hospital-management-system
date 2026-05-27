@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getTokenDisplay, getDoctors } from '../../api';
+import { getTokenDisplay } from '../../api';
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap');
@@ -419,30 +419,40 @@ export default function TokenDisplay() {
   const hospitalName = localStorage.getItem('hospital_name')    || 'Hospital Management';
   const tagline      = localStorage.getItem('hospital_tagline') || 'Quality Healthcare';
 
+  const tenantIdRef = useRef('');
+
   const refresh = useCallback(async () => {
     try {
-      const [{ data: td }, { data: docs }] = await Promise.all([
-        getTokenDisplay(doctorId),
-        getDoctors(),
-      ]);
+      const { data: td } = await getTokenDisplay(doctorId);
       setCurrent(prev => {
         if (td.current?.token_display !== prev?.token_display) setPopKey(k => k + 1);
         return td.current;
       });
       setNext(td.next || []);
-      setDoctor(docs.find(d => String(d.id) === String(doctorId)));
+      if (td.doctor) {
+        setDoctor(td.doctor);
+        if (td.doctor.tenant_id) tenantIdRef.current = String(td.doctor.tenant_id);
+      }
       if (td.counts) setCounts(td.counts);
     } catch {}
   }, [doctorId]);
 
   useEffect(() => {
     refresh();
-    const tenantInfo = JSON.parse(sessionStorage.getItem('tenant_info') || '{}');
-    const tenantId = tenantInfo.id || '';
     const socket = io('http://localhost:5000');
-    socket.on(`token_update_${tenantId}`, ({ doctor_id }) => {
-      if (String(doctor_id) === String(doctorId)) refresh();
+    socket.on('connect', () => {
+      // Re-subscribe once we know tenantId (populated after first refresh)
     });
+    const handleUpdate = ({ doctor_id }) => {
+      if (String(doctor_id) === String(doctorId)) refresh();
+    };
+    // Poll-based fallback handles the case where tenantId isn't known yet
+    // Socket events are a bonus when tenant_id is available
+    setTimeout(() => {
+      if (tenantIdRef.current) {
+        socket.on(`token_update_${tenantIdRef.current}`, handleUpdate);
+      }
+    }, 2000);
     const poll  = setInterval(refresh, 10000);
     const clock = setInterval(() => setTime(new Date()), 1000);
     return () => { socket.disconnect(); clearInterval(poll); clearInterval(clock); };

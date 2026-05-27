@@ -301,10 +301,16 @@ export default function DoctorDashboard() {
             href={`/token/${id}`}
             target="_blank"
             rel="noreferrer"
-            className="btn-secondary text-xs sm:text-sm"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 select-none shadow-md hover:shadow-lg"
+            style={{ background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)', color: '#fff', boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}
           >
-            📺 <span className="hidden sm:inline">Token Display</span>
-            <span className="sm:hidden">Token</span>
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            <span>Token Display</span>
+            <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
           </a>
           <input
             type="date"

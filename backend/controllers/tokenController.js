@@ -11,6 +11,13 @@ const getTokenDisplay = async (req, res) => {
     const { doctor_id } = req.query;
     const today = localDateStr();
 
+    const [[doctor]] = await db.query(
+      `SELECT d.id, d.name, d.specialization, d.tenant_id, t.hospital_name, t.hospital_tagline
+       FROM doctors d LEFT JOIN tenants t ON t.id = d.tenant_id
+       WHERE d.id = ? LIMIT 1`,
+      [doctor_id]
+    );
+
     const [[current]] = await db.query(
       `SELECT a.*, p.name as patient_name FROM appointments a
        LEFT JOIN patients p ON a.patient_id = p.id
@@ -40,6 +47,7 @@ const getTokenDisplay = async (req, res) => {
 
     const fmt = (row) => row ? { ...row, patient: { name: row.patient_name } } : null;
     res.json({
+      doctor: doctor || null,
       current: fmt(current),
       next: next.map(fmt),
       counts: {
