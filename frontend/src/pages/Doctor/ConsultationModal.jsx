@@ -148,44 +148,36 @@ function MedicineRow({ item, onChange, onRemove, disabled }) {
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      {/* Row 1 — name · dosage · delete */}
-      <div className="flex items-center gap-2 p-2">
+    <div className="rounded-xl border border-gray-200 bg-white hover:border-blue-200 transition-colors">
+      <div className="flex items-center gap-2 px-2 py-2">
+
+        {/* Name — takes remaining space */}
         <div className="flex-1 min-w-0">{nameInput}</div>
+
+        {/* Dosage */}
         <input
-          className="input text-sm w-20 sm:w-28 flex-shrink-0"
+          className="input text-sm w-24 flex-shrink-0 text-center"
           placeholder="Dosage"
           value={item.dosage}
           disabled={disabled}
           onChange={(e) => onChange('dosage', e.target.value)}
         />
-        {!disabled && (
-          <button type="button" onClick={onRemove} title="Remove"
-            className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        )}
-      </div>
 
-      {/* Row 2 — timing pills · duration */}
-      <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-t border-gray-100">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">Timing</span>
-        <div className="flex gap-1.5">
+        {/* Timing M / A / N */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           {[
-            { key: 'morning',   label: 'Morning',   short: 'M', active: 'bg-amber-500 text-white border-amber-400'   },
-            { key: 'afternoon', label: 'Afternoon',  short: 'A', active: 'bg-sky-500 text-white border-sky-400'      },
-            { key: 'night',     label: 'Night',      short: 'N', active: 'bg-indigo-600 text-white border-indigo-500' },
-          ].map(({ key, label, short, active }) => (
+            { key: 'morning',   short: 'M', active: 'bg-amber-400 text-white border-amber-300'   },
+            { key: 'afternoon', short: 'A', active: 'bg-sky-400 text-white border-sky-300'        },
+            { key: 'night',     short: 'N', active: 'bg-indigo-500 text-white border-indigo-400'  },
+          ].map(({ key, short, active }) => (
             <button
               key={key}
               type="button"
               disabled={disabled}
               onClick={() => !disabled && onChange(key, !item[key])}
-              title={label}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex-shrink-0 ${
-                item[key] ? active : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+              title={key.charAt(0).toUpperCase() + key.slice(1)}
+              className={`w-7 h-7 rounded-lg text-xs font-bold border transition-all flex-shrink-0 ${
+                item[key] ? active : 'bg-gray-50 text-gray-300 border-gray-200 hover:border-gray-400 hover:text-gray-500'
               } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
             >
               {short}
@@ -193,21 +185,29 @@ function MedicineRow({ item, onChange, onRemove, disabled }) {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Days</span>
-          <div className="relative w-16">
-            <input
-              type="number"
-              min="1"
-              className="input text-sm text-center pr-5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              placeholder="—"
-              value={item.duration}
-              disabled={disabled}
-              onChange={(e) => onChange('duration', e.target.value)}
-            />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">d</span>
-          </div>
+        {/* Days */}
+        <div className="relative flex-shrink-0 w-14">
+          <input
+            type="number"
+            min="1"
+            className="input text-sm text-center pr-4 w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            placeholder="—"
+            value={item.duration}
+            disabled={disabled}
+            onChange={(e) => onChange('duration', e.target.value)}
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 pointer-events-none">d</span>
         </div>
+
+        {/* Delete */}
+        {!disabled && (
+          <button type="button" onClick={onRemove} title="Remove"
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -441,15 +441,13 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label mb-0">Medicines</label>
-                <div className="hidden sm:flex gap-2 text-xs text-gray-400 flex-1 ml-4">
-                  <span className="flex-1 min-w-0">Name</span>
-                  <span className="w-24">Dosage</span>
-                  <span className="w-20">M / A / N</span>
-                  <span className="w-14">Days</span>
-                  <span className="w-6" />
-                </div>
+              <div className="flex items-center gap-2 mb-2 px-2">
+                <label className="label mb-0 flex-shrink-0">Medicines</label>
+                <div className="flex-1" />
+                <span className="hidden sm:block text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-24 text-center">Dosage</span>
+                <span className="hidden sm:block text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-[88px] text-center">M · A · N</span>
+                <span className="hidden sm:block text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-14 text-center">Days</span>
+                <span className="w-7" />
               </div>
               <div className="space-y-2">
                 {items.map((item, i) => (
@@ -463,8 +461,15 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
                 ))}
               </div>
               {!savedRx && (
-                <button type="button" onClick={addItem} className="mt-2 text-sm text-blue-600 hover:underline">
-                  + Add Medicine
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/>
+                  </svg>
+                  Add Medicine
                 </button>
               )}
             </div>
