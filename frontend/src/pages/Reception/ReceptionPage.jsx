@@ -286,29 +286,29 @@ function RegisterForm({ phone, onRegistered }) {
     setOcrState('scanning');
     setOcrProgress(10);
 
-    // 1. Try server-side Python OCR first
+    // 1. Claude AI extraction (high accuracy)
     try {
       const formData = new FormData();
       formData.append('file', file);
-      setOcrProgress(25);
-      const response = await fetch('/api/ocr/extract', { method: 'POST', body: formData });
+      setOcrProgress(30);
+      const response = await fetch('/api/ocr/extract-ai', { method: 'POST', body: formData });
       const json = await response.json();
       if (response.ok && json.success && json.data) {
         fillFromExtracted(json.data);
         return;
       }
     } catch {
-      // server offline — fall through to client-side
+      // network error — fall through to client-side
     }
 
-    // 2. Client-side OCR with Tesseract.js
+    // 2. Client-side OCR with Tesseract.js (fallback)
     try {
-      setOcrProgress(30);
+      setOcrProgress(40);
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng', 1, {
         logger: (m) => {
           if (m.status === 'recognizing text') {
-            setOcrProgress(30 + Math.round(m.progress * 60));
+            setOcrProgress(40 + Math.round(m.progress * 50));
           }
         },
       });
