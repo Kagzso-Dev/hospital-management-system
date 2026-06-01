@@ -1,0 +1,16 @@
+{
+  "name": "hospital-demo-video",
+  "version": "1.0.0",
+  "description": "Hospital Management System animated demo video",
+  "scripts": {
+    "studio": "npx remotion studio src/index.jsx",
+    "render": "npx remotion render src/index.jsx HospitalDemo --output \"C:/Users/Admin/OneDrive/Pictures/Documents/hospital-demo.mp4\" --codec h264 --concurrency 4",
+    "render:preview": "npx remotion render src/index.jsx HospitalDemo --output ./out/preview.mp4 --codec h264 --scale 0.5 --concurrency 4"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "remotion": "^4.0.0",
+    "@remotion/cli": "^4.0.0"
+  }
+}
