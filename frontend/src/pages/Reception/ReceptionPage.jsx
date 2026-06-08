@@ -3,6 +3,7 @@ import { searchPatients, createPatient, getDoctors, getAvailableSlots, createApp
 import PaymentStep from './PaymentStep';
 import ReceiptView from './ReceiptView';
 import { useToast } from '../../components/Toast';
+import SmartPad from '../../components/SmartPad';
 
 const STEPS = { SEARCH: 'search', REGISTER: 'register', BOOK: 'book', PAYMENT: 'payment', RECEIPT: 'receipt' };
 
@@ -325,6 +326,17 @@ function RegisterForm({ phone, onRegistered }) {
     }
   };
 
+  const handleSmartPadExtract = (result) => {
+    setForm((prev) => ({
+      ...prev,
+      name:    result.name    || prev.name,
+      phone:   result.phone   || prev.phone,
+      age:     result.age     || prev.age,
+      gender:  result.gender  || prev.gender,
+      address: result.address || prev.address,
+    }));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
@@ -455,6 +467,12 @@ function RegisterForm({ phone, onRegistered }) {
       )}
 
       {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
+
+      {/* ── AI Smart Write Pad ── */}
+      <SmartPad
+        mode="patient"
+        onExtract={handleSmartPadExtract}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">

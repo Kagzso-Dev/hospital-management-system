@@ -82,4 +82,8 @@ export const createReceptionCharge = (data) => api.post('/reception-charges', da
 export const listReceptionCharges = (date) => api.get('/reception-charges', { params: { date } });
 export const getReceptionChargeSummary = (date) => api.get('/reception-charges/summary', { params: { date } });
 
+// AI Smart Pad
+export const extractWithAI = (text, mode = 'consultation') => api.post('/ai/extract', { text, mode });
+export const readHandwriting = (imageBase64) => api.post('/ai/read-handwriting', { image: imageBase64 });
+
 export default api;

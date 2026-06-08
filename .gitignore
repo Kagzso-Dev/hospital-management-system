@@ -2,5 +2,12 @@
 node_modules/
 dist/
 .env
+*.env
 *.log
 node_modules
+
+# Python virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc

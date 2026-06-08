@@ -7,6 +7,7 @@ import {
 } from '../../api';
 import PrintPrescription from '../../components/PrintPrescription';
 import PrintBill from '../../components/PrintBill';
+import SmartPad from '../../components/SmartPad';
 
 function MedicineRow({ item, onChange, onRemove, disabled }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -163,25 +164,27 @@ function MedicineRow({ item, onChange, onRemove, disabled }) {
           onChange={(e) => onChange('dosage', e.target.value)}
         />
 
-        {/* Timing M / A / N */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Timing M / A / N checkboxes */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           {[
-            { key: 'morning',   short: 'M', active: 'bg-amber-400 text-white border-amber-300'   },
-            { key: 'afternoon', short: 'A', active: 'bg-sky-400 text-white border-sky-300'        },
-            { key: 'night',     short: 'N', active: 'bg-indigo-500 text-white border-indigo-400'  },
-          ].map(({ key, short, active }) => (
-            <button
+            { key: 'morning',   short: 'M', color: 'accent-amber-500'   },
+            { key: 'afternoon', short: 'A', color: 'accent-sky-500'      },
+            { key: 'night',     short: 'N', color: 'accent-indigo-600'   },
+          ].map(({ key, short, color }) => (
+            <label
               key={key}
-              type="button"
-              disabled={disabled}
-              onClick={() => !disabled && onChange(key, !item[key])}
               title={key.charAt(0).toUpperCase() + key.slice(1)}
-              className={`w-7 h-7 rounded-lg text-xs font-bold border transition-all flex-shrink-0 ${
-                item[key] ? active : 'bg-gray-50 text-gray-300 border-gray-200 hover:border-gray-400 hover:text-gray-500'
-              } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+              className={`flex flex-col items-center gap-0.5 ${disabled ? 'cursor-default opacity-70' : 'cursor-pointer'}`}
             >
-              {short}
-            </button>
+              <span className="text-[10px] font-bold text-gray-400 leading-none">{short}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(item[key])}
+                disabled={disabled}
+                onChange={(e) => !disabled && onChange(key, e.target.checked)}
+                className={`w-4 h-4 rounded ${color} ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+              />
+            </label>
           ))}
         </div>
 
@@ -365,6 +368,22 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
     });
   }, [appointment.id, isCompleted]);
 
+  const handleAIExtract = (result) => {
+    if (result.diagnosis) setDiagnosis(result.diagnosis);
+    if (result.notes)     setNotes(result.notes);
+    if (result.medicines?.length) {
+      setItems(result.medicines.map((m) => ({
+        medicine_name: m.medicine_name || '',
+        dosage:        m.dosage        || '',
+        morning:       Boolean(m.morning),
+        afternoon:     Boolean(m.afternoon),
+        night:         Boolean(m.night),
+        duration:      m.duration != null ? String(m.duration) : '',
+        instructions:  '',
+      })));
+    }
+  };
+
   const updateItem = (idx, field, val) => {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: val } : item)));
   };
@@ -428,6 +447,14 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
 
         <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x min-h-96">
           <div className="flex-1 p-4 sm:p-5 space-y-4">
+
+            {/* ── AI Smart Write Pad ── */}
+            <SmartPad
+              mode="consultation"
+              disabled={!!savedRx}
+              onExtract={handleAIExtract}
+            />
+
             <div>
               <label className="label">Diagnosis</label>
               <textarea

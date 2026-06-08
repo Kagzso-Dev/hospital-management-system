@@ -30,6 +30,7 @@ async function start() {
   app.use('/api/payments', require('./routes/payments'));
   app.use('/api/reception-charges', require('./routes/receptionCharges'));
   app.use('/api/ocr', require('./routes/ocr'));
+  app.use('/api/ai',  require('./routes/ai'));
 
   app.use(express.static(path.join(__dirname, '../frontend/dist')));
   app.get('*', (req, res) => {
