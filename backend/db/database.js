@@ -464,7 +464,14 @@ const db = {
 
     for (const sql of MIGRATIONS) {
       try { await _pool.execute(sql); } catch (e) {
-        if (!e.message.includes('Duplicate') && !e.message.includes('already exists')) throw e;
+        // 1060 = ER_DUP_FIELDNAME (column already exists)
+        // 1061 = ER_DUP_KEYNAME   (index already exists)
+        // 1062 = ER_DUP_ENTRY     (duplicate row)
+        // 1050 = ER_TABLE_EXISTS_ERROR
+        const ignorable = [1060, 1061, 1062, 1050].includes(e.errno)
+          || e.message.includes('Duplicate')
+          || e.message.includes('already exists');
+        if (!ignorable) throw e;
       }
     }
 
