@@ -24,6 +24,8 @@ export default function TenantLogin() {
         if (s.data.hospital_name)    localStorage.setItem('hospital_name',              s.data.hospital_name);
         if (s.data.hospital_tagline !== undefined) localStorage.setItem('hospital_tagline', s.data.hospital_tagline || '');
         localStorage.setItem('procedure_charge_enabled', String(!!s.data.procedure_charge_enabled));
+        localStorage.setItem('smart_pad_enabled', String(s.data.smart_pad_enabled !== 0 && s.data.smart_pad_enabled !== false));
+        localStorage.setItem('ocr_enabled', String(s.data.ocr_enabled !== 0 && s.data.ocr_enabled !== false));
       } catch {}
       navigate('/home', { replace: true });
     } catch (err) {

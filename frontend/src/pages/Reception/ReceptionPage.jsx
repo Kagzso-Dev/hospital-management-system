@@ -1,5 +1,5 @@
 ﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { searchPatients, createPatient, getDoctors, getAvailableSlots, createAppointment, createReceptionCharge, getPendingProcedureCharges, payProcedureCharge } from '../../api';
+import api, { searchPatients, createPatient, getDoctors, getAvailableSlots, createAppointment, createReceptionCharge, getPendingProcedureCharges, payProcedureCharge } from '../../api';
 import PaymentStep from './PaymentStep';
 import ReceiptView from './ReceiptView';
 import { useToast } from '../../components/Toast';
@@ -232,6 +232,19 @@ function RegisterForm({ phone, onRegistered }) {
   const [preview, setPreview] = useState(null);
   // Track which fields were filled by OCR so we can clear them on cancel
   const ocrFilledRef = useRef({ name: false, age: false, gender: false, address: false, id_number: false });
+  // Default from localStorage (set at login), then refresh live from API so superadmin toggles take effect immediately
+  const [smartPadEnabled, setSmartPadEnabled] = useState(localStorage.getItem('smart_pad_enabled') !== 'false');
+  const [ocrEnabled, setOcrEnabled] = useState(localStorage.getItem('ocr_enabled') !== 'false');
+  useEffect(() => {
+    api.get('/admin/settings').then(({ data }) => {
+      const sp = data.smart_pad_enabled !== 0 && data.smart_pad_enabled !== false;
+      const ocr = data.ocr_enabled !== 0 && data.ocr_enabled !== false;
+      setSmartPadEnabled(sp);
+      setOcrEnabled(ocr);
+      localStorage.setItem('smart_pad_enabled', String(sp));
+      localStorage.setItem('ocr_enabled', String(ocr));
+    }).catch(() => {});
+  }, []);
   const uploadRef = useRef();
   const cameraRef = useRef();
   const workerRef = useRef(null);
@@ -398,48 +411,52 @@ function RegisterForm({ phone, onRegistered }) {
       <div className="flex flex-col xs:flex-row xs:items-start xs:justify-between gap-3 xs:gap-4">
         <h2 className="font-bold text-lg text-gray-800">New Patient Registration</h2>
         <div className="flex flex-col gap-2 items-end">
-          {/* Upload button */}
-          <input
-            ref={uploadRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => runOcr(e.target.files[0])}
-          />
-          {/* Camera capture button */}
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => runOcr(e.target.files[0])}
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => uploadRef.current.click()}
-              disabled={ocrState === 'scanning'}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Upload & Extract
-            </button>
-            <button
-              type="button"
-              onClick={() => cameraRef.current.click()}
-              disabled={ocrState === 'scanning'}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-50"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Capture & Extract
-            </button>
-          </div>
+          {ocrEnabled && (
+            <>
+              {/* Upload button */}
+              <input
+                ref={uploadRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => runOcr(e.target.files[0])}
+              />
+              {/* Camera capture button */}
+              <input
+                ref={cameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => runOcr(e.target.files[0])}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => uploadRef.current.click()}
+                  disabled={ocrState === 'scanning'}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Upload & Extract
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraRef.current.click()}
+                  disabled={ocrState === 'scanning'}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Capture & Extract
+                </button>
+              </div>
+            </>
+          )}
           {ocrState === 'done' && (
             <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-md border border-green-200">
               <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -513,6 +530,7 @@ function RegisterForm({ phone, onRegistered }) {
       <SmartPad
         mode="patient"
         onExtract={handleSmartPadExtract}
+        disabled={!smartPadEnabled}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

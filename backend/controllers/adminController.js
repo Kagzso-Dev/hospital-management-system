@@ -311,7 +311,7 @@ const getRegistrations = async (req, res) => {
 const getSettings = async (req, res) => {
   try {
     const [[row]] = await db.query(
-      'SELECT hospital_name, hospital_tagline, procedure_charge_enabled FROM tenants WHERE id = ?',
+      'SELECT hospital_name, hospital_tagline, procedure_charge_enabled, smart_pad_enabled, ocr_enabled FROM tenants WHERE id = ?',
       [req.tenantId]
     );
     res.json(row || {});

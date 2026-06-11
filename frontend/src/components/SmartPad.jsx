@@ -89,16 +89,14 @@ export default function SmartPad({ mode = 'consultation', onExtract, disabled })
     return () => clearTimeout(id);
   }, [open]); // ← intentionally NOT including `tab` — preserves drawing between tab switches
 
-  if (disabled) return null;
-
-  // ── Canvas helpers ────────────────────────────────────────────────────────
-  const clearCanvas = () => {
+  // ── Canvas helpers — hooks must be declared before any early return ─────────
+  const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-  };
+  }, []);
 
   const startDraw = useCallback((e) => {
     e.preventDefault();
@@ -130,6 +128,8 @@ export default function SmartPad({ mode = 'consultation', onExtract, disabled })
     e?.preventDefault();
     drawingRef.current = false;
   }, []);
+
+  if (disabled) return null;
 
   // ── Handwriting read ──────────────────────────────────────────────────────
   const handleReadHandwriting = async () => {

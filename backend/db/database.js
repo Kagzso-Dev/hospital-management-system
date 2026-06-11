@@ -205,6 +205,8 @@ const MIGRATIONS = [
   `ALTER TABLE tenants ADD COLUMN hospital_name VARCHAR(100) NULL DEFAULT NULL`,
   `ALTER TABLE tenants ADD COLUMN hospital_tagline VARCHAR(100) NULL DEFAULT NULL`,
   `ALTER TABLE tenants ADD COLUMN procedure_charge_enabled TINYINT DEFAULT 0`,
+  `ALTER TABLE tenants ADD COLUMN smart_pad_enabled TINYINT DEFAULT 1`,
+  `ALTER TABLE tenants ADD COLUMN ocr_enabled TINYINT DEFAULT 1`,
 ];
 
 async function seedDemo(pool) {

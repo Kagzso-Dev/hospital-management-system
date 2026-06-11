@@ -23,7 +23,7 @@ const superadminLogin = async (req, res) => {
 const listTenants = async (req, res) => {
   try {
     const [tenants] = await db.query(
-      `SELECT t.id, t.name, t.username, t.password, t.status, t.created_at,
+      `SELECT t.id, t.name, t.username, t.password, t.status, t.created_at, t.smart_pad_enabled, t.ocr_enabled,
         (SELECT COUNT(*) FROM doctors d WHERE d.tenant_id = t.id AND d.is_active = 1) AS doctor_count,
         (SELECT COUNT(*) FROM patients p WHERE p.tenant_id = t.id) AS patient_count
        FROM tenants t ORDER BY t.id`
@@ -130,4 +130,26 @@ const deleteTenant = async (req, res) => {
   }
 };
 
-module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant };
+const toggleTenantOcr = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { enabled } = req.body;
+    await db.execute('UPDATE tenants SET ocr_enabled = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+    res.json({ ok: true, ocr_enabled: enabled ? 1 : 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const toggleTenantSmartPad = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { enabled } = req.body;
+    await db.execute('UPDATE tenants SET smart_pad_enabled = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+    res.json({ ok: true, smart_pad_enabled: enabled ? 1 : 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { superadminLogin, listTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant, toggleTenantSmartPad, toggleTenantOcr };

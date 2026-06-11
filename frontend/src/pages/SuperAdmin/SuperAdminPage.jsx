@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant } from '../../api';
+import { getSuperadminTenants, createTenant, updateTenantStatus, updateTenantPassword, updateTenantUsername, updateTenantName, deleteTenant, updateTenantSmartPad, updateTenantOcr } from '../../api';
 
 /* ── Shared dark background ── */
 function PageWrap({ children }) {
@@ -99,7 +99,7 @@ function CreateTenantModal({ onClose, onCreate }) {
 }
 
 /* ── Tenant Card ── */
-function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange, onNameChange, onDelete }) {
+function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange, onNameChange, onDelete, onSmartPadChange, onOcrChange }) {
   const [resetting, setResetting] = useState(false);
   const [newPwd, setNewPwd] = useState('');
   const [showReset, setShowReset] = useState(false);
@@ -111,9 +111,13 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
   const [showChangeName, setShowChangeName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [togglingSmartPad, setTogglingSmartPad] = useState(false);
+  const [togglingOcr, setTogglingOcr] = useState(false);
   const [revealPwd, setRevealPwd] = useState(false);
   const [revealUser, setRevealUser] = useState(false);
   const isActive = tenant.status === 'active';
+  const smartPadOn = tenant.smart_pad_enabled !== 0 && tenant.smart_pad_enabled !== false;
+  const ocrOn = tenant.ocr_enabled !== 0 && tenant.ocr_enabled !== false;
 
   const handleChangeName = async () => {
     if (!newName || newName.trim().length < 2) return alert('Name must be at least 2 characters');
@@ -179,6 +183,30 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
       alert(err.response?.data?.error || 'Delete failed');
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  };
+
+  const handleToggleSmartPad = async () => {
+    setTogglingSmartPad(true);
+    try {
+      await updateTenantSmartPad(tenant.id, !smartPadOn);
+      onSmartPadChange(tenant.id, !smartPadOn);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to toggle Smart Pad');
+    } finally {
+      setTogglingSmartPad(false);
+    }
+  };
+
+  const handleToggleOcr = async () => {
+    setTogglingOcr(true);
+    try {
+      await updateTenantOcr(tenant.id, !ocrOn);
+      onOcrChange(tenant.id, !ocrOn);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to toggle OCR');
+    } finally {
+      setTogglingOcr(false);
     }
   };
 
@@ -266,6 +294,14 @@ function TenantCard({ tenant, onStatusChange, onUsernameChange, onPasswordChange
         <button onClick={() => { setShowChangeName(v => !v); setShowReset(false); setShowChangeUser(false); setConfirmDelete(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-purple-400/15 text-purple-300 hover:bg-purple-400/25 border border-purple-400/30 transition">
           Edit Name
+        </button>
+        <button onClick={handleToggleOcr} disabled={togglingOcr}
+          className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold transition disabled:opacity-60 ${ocrOn ? 'bg-blue-400/15 text-blue-300 hover:bg-blue-400/25 border border-blue-400/30' : 'bg-amber-400/15 text-amber-300 hover:bg-amber-400/25 border border-amber-400/30'}`}>
+          {togglingOcr ? '...' : ocrOn ? 'OCR ON' : 'OCR OFF'}
+        </button>
+        <button onClick={handleToggleSmartPad} disabled={togglingSmartPad}
+          className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold transition disabled:opacity-60 ${smartPadOn ? 'bg-green-400/15 text-green-300 hover:bg-green-400/25 border border-green-400/30' : 'bg-amber-400/15 text-amber-300 hover:bg-amber-400/25 border border-amber-400/30'}`}>
+          {togglingSmartPad ? '...' : smartPadOn ? 'SmartPad ON' : 'SmartPad OFF'}
         </button>
         <button onClick={() => { setConfirmDelete(true); setShowReset(false); setShowChangeUser(false); setShowChangeName(false); }}
           className="flex-1 min-w-[80px] py-2 rounded-xl text-xs font-bold bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-400/30 transition">
@@ -364,6 +400,12 @@ function Dashboard() {
   const handleDelete = (id) =>
     setTenants(prev => prev.filter(t => t.id !== id));
 
+  const handleSmartPadChange = (id, enabled) =>
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, smart_pad_enabled: enabled ? 1 : 0 } : t));
+
+  const handleOcrChange = (id, enabled) =>
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, ocr_enabled: enabled ? 1 : 0 } : t));
+
   const filtered = tenants.filter(t =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
     t.username.toLowerCase().includes(search.toLowerCase())
@@ -430,7 +472,7 @@ function Dashboard() {
           ) : (
             <div className="space-y-3">
               {filtered.map(t => (
-                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onUsernameChange={handleUsernameChange} onPasswordChange={handlePasswordChange} onNameChange={handleNameChange} onDelete={handleDelete} />
+                <TenantCard key={t.id} tenant={t} onStatusChange={handleStatusChange} onUsernameChange={handleUsernameChange} onPasswordChange={handlePasswordChange} onNameChange={handleNameChange} onDelete={handleDelete} onSmartPadChange={handleSmartPadChange} onOcrChange={handleOcrChange} />
               ))}
             </div>
           )}

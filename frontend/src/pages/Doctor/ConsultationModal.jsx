@@ -5,6 +5,7 @@ import {
   updateAppointmentStatus, searchMedicines, getAppointmentPrescription,
   getMedicineDetails, getPayment,
 } from '../../api';
+import api from '../../api';
 import PrintPrescription from '../../components/PrintPrescription';
 import PrintBill from '../../components/PrintBill';
 import SmartPad from '../../components/SmartPad';
@@ -331,6 +332,14 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
   const [procedureLabel, setProcedureLabel] = useState('');
   const [paymentData, setPaymentData] = useState(null);
   const procedureEnabled = localStorage.getItem('procedure_charge_enabled') === 'true';
+  const [smartPadEnabled, setSmartPadEnabled] = useState(localStorage.getItem('smart_pad_enabled') !== 'false');
+  useEffect(() => {
+    api.get('/admin/settings').then(({ data }) => {
+      const sp = data.smart_pad_enabled !== 0 && data.smart_pad_enabled !== false;
+      setSmartPadEnabled(sp);
+      localStorage.setItem('smart_pad_enabled', String(sp));
+    }).catch(() => {});
+  }, []);
   const printRef = useRef();
   const billRef = useRef();
 
@@ -451,7 +460,7 @@ export default function ConsultationModal({ appointment, doctor, onClose }) {
             {/* ── AI Smart Write Pad ── */}
             <SmartPad
               mode="consultation"
-              disabled={!!savedRx}
+              disabled={!!savedRx || !smartPadEnabled}
               onExtract={handleAIExtract}
             />
 

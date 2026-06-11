@@ -38,6 +38,8 @@ export const updateTenantPassword = (id, password) => saApi.put(`/tenants/${id}/
 export const updateTenantUsername = (id, username) => saApi.put(`/tenants/${id}/username`, { username });
 export const updateTenantName = (id, name) => saApi.put(`/tenants/${id}/name`, { name });
 export const deleteTenant = (id) => saApi.delete(`/tenants/${id}`);
+export const updateTenantSmartPad = (id, enabled) => saApi.put(`/tenants/${id}/smart-pad`, { enabled });
+export const updateTenantOcr = (id, enabled) => saApi.put(`/tenants/${id}/ocr`, { enabled });
 
 // Patients
 export const searchPatients = (params) => api.get('/patients', { params });
