@@ -280,6 +280,24 @@ function RegisterForm({ phone, onRegistered }) {
     setOcrProgress(100);
   };
 
+  // Compress image to max 1200px / JPEG 85% before upload — reduces API time 5-10x
+  const compressImage = (file) => new Promise((resolve) => {
+    const img = new Image();
+    const blobUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1200;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(blobUrl);
+      canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(file); };
+    img.src = blobUrl;
+  });
+
   const runOcr = async (file) => {
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -289,12 +307,35 @@ function RegisterForm({ phone, onRegistered }) {
 
     // 1. Claude AI extraction (high accuracy)
     try {
+      // Compress before upload — phone camera JPEGs can be 5-8 MB
+      const compressed = await compressImage(file);
+      setOcrProgress(20);
+
       const formData = new FormData();
-      formData.append('file', file);
-      setOcrProgress(30);
-      const response = await fetch('/api/ocr/extract-ai', { method: 'POST', body: formData });
-      const json = await response.json();
+      formData.append('file', compressed, 'id_card.jpg');
+      setOcrProgress(25);
+
+      // Send auth token so tenantAuth middleware accepts the request
+      const token = sessionStorage.getItem('tenant_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Animate progress 25→85 smoothly while waiting for Claude response
+      let prog = 25;
+      const ticker = setInterval(() => {
+        prog = Math.min(prog + 3, 85);
+        setOcrProgress(prog);
+      }, 200);
+
+      let response, json;
+      try {
+        response = await fetch('/api/ocr/extract-ai', { method: 'POST', headers, body: formData });
+        json = await response.json();
+      } finally {
+        clearInterval(ticker);
+      }
+
       if (response.ok && json.success && json.data) {
+        setOcrProgress(100);
         fillFromExtracted(json.data);
         return;
       }
